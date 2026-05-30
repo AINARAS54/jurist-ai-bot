@@ -137,6 +137,12 @@ Naudok šią struktūrą:
 💳 Chargeback galimybė, jei aktualu
 ✅ Galutinė išvada
 
+🧭 Kiti klausimai bylai patikslinti
+Pabaigoje sugeneruok 3–5 konkrečius klausimus vartotojui, kurie padėtų geriau aptarnauti bylą.
+
+💡 Papildomi pasiūlymai
+Pabaigoje pateik 3 praktinius pasiūlymus, ką vartotojas turėtų padaryti toliau.
+
 Situacija:
 {user_text}
 """
@@ -176,6 +182,12 @@ Bruk denne strukturen:
 💳 Chargeback-mulighet hvis relevant
 ✅ Endelig konklusjon
 
+🧭 Oppfølgingsspørsmål for å avklare saken
+Til slutt, generer 3–5 konkrete spørsmål som kan hjelpe med å håndtere saken bedre.
+
+💡 Ekstra forslag
+Til slutt, gi 3 praktiske forslag til hva brukeren bør gjøre videre.
+
 Situasjon:
 {user_text}
 """
@@ -213,6 +225,12 @@ Use this structure:
 📄 Draft complaint / claim letter
 💳 Chargeback option if relevant
 ✅ Final conclusion
+
+🧭 Follow-up questions for case clarification
+At the end, generate 3–5 specific questions that would help handle the case better.
+
+💡 Additional suggestions
+At the end, provide 3 practical next-step suggestions.
 
 User situation:
 {user_text}
