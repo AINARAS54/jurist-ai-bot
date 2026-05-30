@@ -32,10 +32,10 @@ web_app = Flask(__name__)
 users = {}
 
 SYSTEM_PROMPT = """
-You are Jurist AI – Consumer Rights & Legal Claims Assistant.
+You are Jurist AI - Consumer Rights & Legal Claims Assistant.
 
 SYSTEM_PROMPT = """
-You are Jurist AI – Consumer Rights & Legal Claims Assistant.
+You are Jurist AI - Consumer Rights & Legal Claims Assistant.
 
 LANGUAGE RULE:
 - If language is Lithuanian, answer ONLY in Lithuanian.
@@ -90,7 +90,7 @@ LANG_TEXT = {
         "describe": "📁 Nauja byla\n\nTrumpai aprašykite savo situaciją.\n\nPavyzdžiai:\n\n• Negavau prekės\n• Pardavėjas negrąžina pinigų\n• Įtariamas sukčiavimas\n• Problema su prenumerata\n• Garantinis ginčas\n\nKuo daugiau detalių pateiksite, tuo tikslesnė bus analizė.",
         "thinking": "⏳ Analizuoju...",
         "free_done": "🔎 Tai trumpas nemokamas vertinimas.\n\nNorint gauti pilną analizę, veiksmų planą ir dokumento juodraštį, atrakinkite pilną analizę.",
-        "unlock": "🔓 Atrakinti pilną analizę (TEST)" if TEST_MODE else f"🔓 Atrakinti pilną analizę – ⭐{UNLOCK_PRICE_STARS}",
+        "unlock": "🔓 Atrakinti pilną analizę (TEST)" if TEST_MODE else f"🔓 Atrakinti pilną analizę - ⭐{UNLOCK_PRICE_STARS}",
         "paid": "✅ Pilna analizė atrakinta. Ruošiu Jurist AI analizę...",
         "test": "🧪 TEST REŽIMAS: pilna analizė atrakinta.",
     },
@@ -98,7 +98,7 @@ LANG_TEXT = {
         "describe": "📁 New case\n\nBriefly describe your situation.\n\nExamples:\n\n• I did not receive my order\n• Seller refuses to refund me\n• Possible fraud or scam\n• Subscription problem\n• Warranty dispute\n\nThe more details you provide, the more accurate the analysis will be.",
         "thinking": "⏳ Analyzing...",
         "free_done": "🔎 This is a short free assessment.\n\nUnlock the full analysis to receive a full review, action plan and document draft.",
-        "unlock": "🔓 Unlock full analysis (TEST)" if TEST_MODE else f"🔓 Unlock full analysis – ⭐{UNLOCK_PRICE_STARS}",
+        "unlock": "🔓 Unlock full analysis (TEST)" if TEST_MODE else f"🔓 Unlock full analysis - ⭐{UNLOCK_PRICE_STARS}",
         "paid": "✅ Full analysis unlocked. Preparing Jurist AI analysis...",
         "test": "🧪 TEST MODE: full analysis unlocked.",
     },
@@ -106,7 +106,7 @@ LANG_TEXT = {
         "describe": "📁 Ny sak\n\nBeskriv kort situasjonen din.\n\nEksempler:\n\n• Jeg mottok ikke varen\n• Selger nekter refusjon\n• Mulig svindel\n• Problem med abonnement\n• Garantitvist\n\nJo flere detaljer du gir, desto mer presis blir analysen.",
         "thinking": "⏳ Analyserer...",
         "free_done": "🔎 Dette er en kort gratis vurdering.\n\nLås opp full analyse for å få komplett vurdering, handlingsplan og dokumentutkast.",
-        "unlock": "🔓 Lås opp full analyse (TEST)" if TEST_MODE else f"🔓 Lås opp full analyse – ⭐{UNLOCK_PRICE_STARS}",
+        "unlock": "🔓 Lås opp full analyse (TEST)" if TEST_MODE else f"🔓 Lås opp full analyse - ⭐{UNLOCK_PRICE_STARS}",
         "paid": "✅ Full analyse låst opp. Forbereder Jurist AI-analyse...",
         "test": "🧪 TESTMODUS: full analyse er låst opp.",
     },
@@ -141,14 +141,14 @@ Naudok šią struktūrą:
 📌 Pagrindiniai faktai
 ⚖️ Galimi vartotojų teisių pažeidimai
 📂 Reikalingi įrodymai
-📊 Bylos stiprumo balas 0–100
+📊 Bylos stiprumo balas 0-100
 🎯 Rekomenduojamas veiksmų planas
 📄 Pretenzijos / skundo juodraštis
 💳 Chargeback galimybė, jei aktualu
 ✅ Galutinė išvada
 
 🧭 Kiti klausimai bylai patikslinti
-Pabaigoje sugeneruok 3–5 konkrečius klausimus vartotojui, kurie padėtų geriau aptarnauti bylą.
+Pabaigoje sugeneruok 3-5 konkrečius klausimus vartotojui, kurie padėtų geriau aptarnauti bylą.
 
 💡 Papildomi pasiūlymai
 Pabaigoje pateik 3 praktinius pasiūlymus, ką vartotojas turėtų padaryti toliau.
@@ -186,14 +186,14 @@ Bruk denne strukturen:
 📌 Viktige fakta
 ⚖️ Mulige brudd på forbrukerrettigheter
 📂 Nødvendige bevis
-📊 Sakens styrke 0–100
+📊 Sakens styrke 0-100
 🎯 Anbefalt handlingsplan
 📄 Utkast til klage / kravbrev
 💳 Chargeback-mulighet hvis relevant
 ✅ Endelig konklusjon
 
 🧭 Oppfølgingsspørsmål for å avklare saken
-Til slutt, generer 3–5 konkrete spørsmål som kan hjelpe med å håndtere saken bedre.
+Til slutt, generer 3-5 konkrete spørsmål som kan hjelpe med å håndtere saken bedre.
 
 💡 Ekstra forslag
 Til slutt, gi 3 praktiske forslag til hva brukeren bør gjøre videre.
@@ -230,14 +230,14 @@ Use this structure:
 📌 Key facts
 ⚖️ Possible consumer rights violations
 📂 Evidence needed
-📊 Case strength score 0–100
+📊 Case strength score 0-100
 🎯 Recommended action plan
 📄 Draft complaint / claim letter
 💳 Chargeback option if relevant
 ✅ Final conclusion
 
 🧭 Follow-up questions for case clarification
-At the end, generate 3–5 specific questions that would help handle the case better.
+At the end, generate 3-5 specific questions that would help handle the case better.
 
 💡 Additional suggestions
 At the end, provide 3 practical next-step suggestions.
