@@ -84,35 +84,52 @@ Select your language:"""
 
 LANG_TEXT = {
     "lt": {
-        "describe": "📁 Nauja byla\n\nTrumpai aprašykite savo situaciją.\n\nPavyzdžiai:\n\n• Negavau prekės\n• Pardavėjas negrąžina pinigų\n• Įtariamas sukčiavimas\n• Problema su prenumerata\n• Garantinis ginčas\n\nKuo daugiau detalių pateiksite, tuo tikslesnė bus analizė.",
-        "thinking": "⏳ Analizuoju...",
-        "free_done": "🔎 Tai trumpas nemokamas vertinimas.\n\nNorint gauti pilną analizę, veiksmų planą ir dokumento juodraštį, atrakinkite pilną analizę.",
-        "unlock": "🔓 Atrakinti pilną analizę (TEST)" if TEST_MODE else f"🔓 Atrakinti pilną analizę - ⭐{UNLOCK_PRICE_STARS}",
-        "paid": "✅ Pilna analizė atrakinta. Ruošiu Jurist AI analizę...",
-        "test": "🧪 TEST REŽIMAS: pilna analizė atrakinta.",
+        "describe": "📁 Nauja byla\n\nTrumpai aprašykite savo situaciją.\n\nPavyzdžiai:\n\n• Negavau prekės\n• Pardavėjas negrąžina pinigų\n• Įtariamas sukčiavimas\n• Problema su prenumerata\n• Garantinis ginčas\n\nKuo daugiau detalių pateiksite, tuo tikslesnė bus išvada.",
+        "thinking": "⏳ Ruošiu atsakymą...",
+        "free_done": "🔎 Tai trumpas nemokamas vertinimas.\n\nNorint gauti išsamų bylos vertinimą, veiksmų planą ir dokumento juodraštį, atrakinkite išplėstinį atsakymą.",
+        "unlock": "🔓 Atrakinti išplėstinį atsakymą (TEST)" if TEST_MODE else f"🔓 Atrakinti išplėstinį atsakymą - ⭐{UNLOCK_PRICE_STARS}",
+        "paid": "✅ Išplėstinis atsakymas paruoštas.",
+        "test": "🧪 TEST REŽIMAS: išplėstinis atsakymas atrakintas.",
+        "choose_doc": "📄 Pasirinkite, kokį dokumentą norite sugeneruoti:",
+        "doc_menu": "📄 Galiu paruošti atskirą dokumentą pagal šią bylą.",
+        "no_case": "Pirmiausia aprašykite situaciją.",
+        "doc_thinking": "⏳ Ruošiu dokumentą...",
     },
     "en": {
-        "describe": "📁 New case\n\nBriefly describe your situation.\n\nExamples:\n\n• I did not receive my order\n• Seller refuses to refund me\n• Possible fraud or scam\n• Subscription problem\n• Warranty dispute\n\nThe more details you provide, the more accurate the analysis will be.",
-        "thinking": "⏳ Analyzing...",
-        "free_done": "🔎 This is a short free assessment.\n\nUnlock the full analysis to receive a full review, action plan and document draft.",
-        "unlock": "🔓 Unlock full analysis (TEST)" if TEST_MODE else f"🔓 Unlock full analysis - ⭐{UNLOCK_PRICE_STARS}",
-        "paid": "✅ Full analysis unlocked. Preparing Jurist AI analysis...",
-        "test": "🧪 TEST MODE: full analysis unlocked.",
+        "describe": "📁 New case\n\nBriefly describe your situation.\n\nExamples:\n\n• I did not receive my order\n• Seller refuses to refund me\n• Possible fraud or scam\n• Subscription problem\n• Warranty dispute\n\nThe more details you provide, the more accurate the assessment will be.",
+        "thinking": "⏳ Preparing response...",
+        "free_done": "🔎 This is a short free assessment.\n\nUnlock the extended response to receive a full case review, action plan and document draft.",
+        "unlock": "🔓 Unlock extended response (TEST)" if TEST_MODE else f"🔓 Unlock extended response - ⭐{UNLOCK_PRICE_STARS}",
+        "paid": "✅ Extended response is ready.",
+        "test": "🧪 TEST MODE: extended response unlocked.",
+        "choose_doc": "📄 Choose which document you want to generate:",
+        "doc_menu": "📄 I can prepare a separate document based on this case.",
+        "no_case": "Please describe your situation first.",
+        "doc_thinking": "⏳ Preparing document...",
     },
     "no": {
-        "describe": "📁 Ny sak\n\nBeskriv kort situasjonen din.\n\nEksempler:\n\n• Jeg mottok ikke varen\n• Selger nekter refusjon\n• Mulig svindel\n• Problem med abonnement\n• Garantitvist\n\nJo flere detaljer du gir, desto mer presis blir analysen.",
-        "thinking": "⏳ Analyserer...",
-        "free_done": "🔎 Dette er en kort gratis vurdering.\n\nLås opp full analyse for å få komplett vurdering, handlingsplan og dokumentutkast.",
-        "unlock": "🔓 Lås opp full analyse (TEST)" if TEST_MODE else f"🔓 Lås opp full analyse - ⭐{UNLOCK_PRICE_STARS}",
-        "paid": "✅ Full analyse låst opp. Forbereder Jurist AI-analyse...",
-        "test": "🧪 TESTMODUS: full analyse er låst opp.",
+        "describe": "📁 Ny sak\n\nBeskriv kort situasjonen din.\n\nEksempler:\n\n• Jeg mottok ikke varen\n• Selger nekter refusjon\n• Mulig svindel\n• Problem med abonnement\n• Garantitvist\n\nJo flere detaljer du gir, desto mer presis blir vurderingen.",
+        "thinking": "⏳ Forbereder svar...",
+        "free_done": "🔎 Dette er en kort gratis vurdering.\n\nLås opp utvidet svar for å få full vurdering, handlingsplan og dokumentutkast.",
+        "unlock": "🔓 Lås opp utvidet svar (TEST)" if TEST_MODE else f"🔓 Lås opp utvidet svar - ⭐{UNLOCK_PRICE_STARS}",
+        "paid": "✅ Utvidet svar er klart.",
+        "test": "🧪 TESTMODUS: utvidet svar er låst opp.",
+        "choose_doc": "📄 Velg hvilket dokument du vil generere:",
+        "doc_menu": "📄 Jeg kan lage et eget dokument basert på denne saken.",
+        "no_case": "Vennligst beskriv situasjonen din først.",
+        "doc_thinking": "⏳ Forbereder dokument...",
     },
 }
 
 
 def get_user(user_id):
     if user_id not in users:
-        users[user_id] = {"lang": None, "case_text": None, "unlocked": False}
+        users[user_id] = {
+            "lang": None,
+            "case_text": None,
+            "unlocked": False,
+            "last_answer": None,
+        }
     return users[user_id]
 
 
@@ -124,13 +141,34 @@ def lang_name(lang):
     return "English"
 
 
+def document_name(doc_type, lang):
+    names = {
+        "lt": {
+            "seller_claim": "pretenziją pardavėjui",
+            "chargeback": "chargeback prašymą bankui",
+            "authority_complaint": "skundą institucijai",
+        },
+        "en": {
+            "seller_claim": "seller complaint letter",
+            "chargeback": "bank chargeback request",
+            "authority_complaint": "consumer authority complaint",
+        },
+        "no": {
+            "seller_claim": "klagebrev til selger",
+            "chargeback": "chargeback-forespørsel til banken",
+            "authority_complaint": "klage til forbrukermyndighet",
+        },
+    }
+    return names.get(lang, names["en"]).get(doc_type, "document")
+
+
 def build_task(user_text, lang, full=False):
     if lang == "lt":
         if full:
             return f"""
 Atsakyk TIK lietuviškai. Nenaudok angliškų antraščių.
 
-Paruošk PILNĄ Jurist AI analizę.
+Paruošk PILNĄ Jurist AI bylos vertinimą.
 
 Naudok šią struktūrą:
 
@@ -140,7 +178,7 @@ Naudok šią struktūrą:
 📂 Reikalingi įrodymai
 📊 Bylos stiprumo balas 0-100
 🎯 Rekomenduojamas veiksmų planas
-📄 Pretenzijos / skundo juodraštis
+📄 Galimi dokumentai
 💳 Chargeback galimybė, jei aktualu
 ✅ Galutinė išvada
 
@@ -149,6 +187,11 @@ Pabaigoje sugeneruok 3-5 konkrečius klausimus vartotojui, kurie padėtų geriau
 
 💡 Papildomi pasiūlymai
 Pabaigoje pateik 3 praktinius pasiūlymus, ką vartotojas turėtų padaryti toliau.
+
+Svarbu:
+- Nekartok žodžio "analizė" per dažnai.
+- Nesiūlyk kreiptis į konsultantus, teisininkus ar kitus specialistus.
+- Jei mini instituciją, nurodyk ją kaip konkretų veiksmą, o ne kaip bendrą konsultaciją.
 
 Situacija:
 {user_text}
@@ -164,7 +207,12 @@ Naudok šią struktūrą:
 ⚠️ Pagrindinė problema
 📂 Trūkstami įrodymai
 🎯 Pirmas rekomenduojamas veiksmas
-🔓 Pilnos analizės galimybė
+🔓 Išplėstinio atsakymo galimybė
+
+Svarbu:
+- Nekartok žodžio "analizė".
+- Nesiūlyk kreiptis į konsultantus, teisininkus ar kitus specialistus.
+- Pateik aiškų kitą veiksmą pats.
 
 Situacija:
 {user_text}
@@ -175,7 +223,7 @@ Situacija:
             return f"""
 Svar KUN på norsk. Ikke bruk engelske overskrifter.
 
-Lag en FULL Jurist AI-analyse.
+Lag en FULL Jurist AI-vurdering.
 
 Bruk denne strukturen:
 
@@ -185,7 +233,7 @@ Bruk denne strukturen:
 📂 Nødvendige bevis
 📊 Sakens styrke 0-100
 🎯 Anbefalt handlingsplan
-📄 Utkast til klage / kravbrev
+📄 Mulige dokumenter
 💳 Chargeback-mulighet hvis relevant
 ✅ Endelig konklusjon
 
@@ -194,6 +242,11 @@ Til slutt, generer 3-5 konkrete spørsmål som kan hjelpe med å håndtere saken
 
 💡 Ekstra forslag
 Til slutt, gi 3 praktiske forslag til hva brukeren bør gjøre videre.
+
+Viktig:
+- Ikke gjenta ordet "analyse" for ofte.
+- Ikke anbefal å kontakte rådgivere, advokater eller eksterne spesialister.
+- Hvis du nevner en institusjon, beskriv det som et konkret tiltak.
 
 Situasjon:
 {user_text}
@@ -209,7 +262,12 @@ Bruk denne strukturen:
 ⚠️ Hovedproblem
 📂 Manglende bevis
 🎯 Første anbefalte steg
-🔓 Mulighet for full analyse
+🔓 Mulighet for utvidet svar
+
+Viktig:
+- Ikke gjenta ordet "analyse".
+- Ikke anbefal å kontakte rådgivere, advokater eller eksterne spesialister.
+- Gi et tydelig neste steg selv.
 
 Situasjon:
 {user_text}
@@ -219,7 +277,7 @@ Situasjon:
         return f"""
 Answer ONLY in English. Do not use Lithuanian or Norwegian headings.
 
-Prepare a FULL Jurist AI analysis.
+Prepare a FULL Jurist AI case review.
 
 Use this structure:
 
@@ -229,7 +287,7 @@ Use this structure:
 📂 Evidence needed
 📊 Case strength score 0-100
 🎯 Recommended action plan
-📄 Draft complaint / claim letter
+📄 Possible documents
 💳 Chargeback option if relevant
 ✅ Final conclusion
 
@@ -238,6 +296,11 @@ At the end, generate 3-5 specific questions that would help handle the case bett
 
 💡 Additional suggestions
 At the end, provide 3 practical next-step suggestions.
+
+Important:
+- Do not repeat the word "analysis" too often.
+- Do not suggest consulting lawyers, advisors, consumer organizations or external specialists.
+- If you mention an institution, describe it as a concrete action target.
 
 User situation:
 {user_text}
@@ -253,15 +316,91 @@ Use this structure:
 ⚠️ Main issue
 📂 Missing evidence
 🎯 First recommended step
-🔓 Full analysis option
+🔓 Extended response option
+
+Important:
+- Do not repeat the word "analysis".
+- Do not suggest consulting lawyers, advisors, consumer organizations or external specialists.
+- Provide a clear next step yourself.
 
 User situation:
 {user_text}
 """
 
 
+def build_document_task(user_text, lang, doc_type):
+    doc = document_name(doc_type, lang)
+
+    if lang == "lt":
+        return f"""
+Atsakyk TIK lietuviškai.
+
+Paruošk dokumentą: {doc}.
+
+Reikalavimai:
+- Dokumentas turi būti formalus, aiškus ir paruoštas kopijavimui.
+- Įtrauk vietas, kur vartotojas turi įrašyti savo duomenis: [Vardas Pavardė], [Adresas], [El. paštas], [Telefonas], [Data].
+- Nesiūlyk kreiptis į konsultantus, teisininkus ar kitus specialistus.
+- Jei trūksta duomenų, naudok laužtinius skliaustus.
+- Dokumento gale pridėk priedų sąrašą.
+
+Bylos informacija:
+{user_text}
+"""
+
+    if lang == "no":
+        return f"""
+Svar KUN på norsk.
+
+Lag dokumentet: {doc}.
+
+Krav:
+- Dokumentet skal være formelt, tydelig og klart til kopiering.
+- Bruk felter brukeren kan fylle ut: [Navn], [Adresse], [E-post], [Telefon], [Dato].
+- Ikke anbefal å kontakte rådgivere, advokater eller eksterne spesialister.
+- Hvis opplysninger mangler, bruk hakeparenteser.
+- Legg til en liste over vedlegg nederst.
+
+Saksinformasjon:
+{user_text}
+"""
+
+    return f"""
+Answer ONLY in English.
+
+Prepare this document: {doc}.
+
+Requirements:
+- The document must be formal, clear and ready to copy.
+- Include placeholders for user details: [Full name], [Address], [Email], [Phone], [Date].
+- Do not suggest consulting lawyers, advisors or external specialists.
+- If information is missing, use square brackets.
+- Add an attachments list at the end.
+
+Case information:
+{user_text}
+"""
+
+
 async def ask_openai(user_text, lang, full=False):
     task = build_task(user_text, lang, full)
+
+    response = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT + f"\nCurrent selected language: {lang_name(lang)}. Reply only in {lang_name(lang)}.",
+            },
+            {"role": "user", "content": task},
+        ],
+    )
+
+    return response.choices[0].message.content
+
+
+async def ask_openai_document(user_text, lang, doc_type):
+    task = build_document_task(user_text, lang, doc_type)
 
     response = client.chat.completions.create(
         model=OPENAI_MODEL,
@@ -307,6 +446,32 @@ async def language_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(LANG_TEXT[lang]["describe"])
 
 
+async def send_document_menu(message, lang):
+    if lang == "lt":
+        keyboard = [
+            [InlineKeyboardButton("📄 Pretenzija pardavėjui", callback_data="doc_seller_claim")],
+            [InlineKeyboardButton("💳 Chargeback prašymas bankui", callback_data="doc_chargeback")],
+            [InlineKeyboardButton("⚖️ Skundas institucijai", callback_data="doc_authority_complaint")],
+        ]
+    elif lang == "no":
+        keyboard = [
+            [InlineKeyboardButton("📄 Klagebrev til selger", callback_data="doc_seller_claim")],
+            [InlineKeyboardButton("💳 Chargeback til banken", callback_data="doc_chargeback")],
+            [InlineKeyboardButton("⚖️ Klage til myndighet", callback_data="doc_authority_complaint")],
+        ]
+    else:
+        keyboard = [
+            [InlineKeyboardButton("📄 Seller complaint letter", callback_data="doc_seller_claim")],
+            [InlineKeyboardButton("💳 Bank chargeback request", callback_data="doc_chargeback")],
+            [InlineKeyboardButton("⚖️ Consumer authority complaint", callback_data="doc_authority_complaint")],
+        ]
+
+    await message.reply_text(
+        LANG_TEXT[lang]["choose_doc"],
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     user = get_user(user_id)
@@ -321,6 +486,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(LANG_TEXT[user["lang"]]["thinking"])
 
     answer = await ask_openai(user["case_text"], user["lang"], full=False)
+    user["last_answer"] = answer
 
     keyboard = [
         [InlineKeyboardButton(LANG_TEXT[user["lang"]]["unlock"], callback_data="unlock")]
@@ -338,31 +504,61 @@ async def unlock_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     user = get_user(query.from_user.id)
+    lang = user.get("lang") or "en"
 
     if not user.get("case_text"):
-        await query.message.reply_text(LANG_TEXT[user["lang"]]["describe"])
+        await query.message.reply_text(LANG_TEXT[lang]["no_case"])
         return
 
     if TEST_MODE:
         user["unlocked"] = True
-        await query.message.reply_text(LANG_TEXT[user["lang"]]["test"])
-        await query.message.reply_text(LANG_TEXT[user["lang"]]["paid"])
+        await query.message.reply_text(LANG_TEXT[lang]["test"])
+        await query.message.reply_text(LANG_TEXT[lang]["paid"])
 
-        answer = await ask_openai(user["case_text"], user["lang"], full=True)
+        answer = await ask_openai(user["case_text"], lang, full=True)
+        user["last_answer"] = answer
 
         for i in range(0, len(answer), 3900):
             await query.message.reply_text(answer[i:i + 3900])
+
+        await query.message.reply_text(LANG_TEXT[lang]["doc_menu"])
+        await send_document_menu(query.message, lang)
         return
 
     await context.bot.send_invoice(
         chat_id=query.message.chat_id,
-        title="Jurist AI Full Analysis",
-        description="Unlock full Jurist AI consumer rights analysis.",
+        title="Jurist AI Full Case Review",
+        description="Unlock full Jurist AI consumer rights case review.",
         payload=f"jurist_ai_unlock_{query.from_user.id}",
         provider_token="",
         currency="XTR",
-        prices=[LabeledPrice("Full analysis", UNLOCK_PRICE_STARS)],
+        prices=[LabeledPrice("Full case review", UNLOCK_PRICE_STARS)],
     )
+
+
+async def document_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    user = get_user(query.from_user.id)
+    lang = user.get("lang") or "en"
+
+    if not user.get("case_text"):
+        await query.message.reply_text(LANG_TEXT[lang]["no_case"])
+        return
+
+    if not user.get("unlocked"):
+        await query.message.reply_text(LANG_TEXT[lang]["free_done"])
+        return
+
+    doc_type = query.data.replace("doc_", "")
+
+    await query.message.reply_text(LANG_TEXT[lang]["doc_thinking"])
+
+    document = await ask_openai_document(user["case_text"], lang, doc_type)
+
+    for i in range(0, len(document), 3900):
+        await query.message.reply_text(document[i:i + 3900])
 
 
 async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -372,14 +568,19 @@ async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 async def successful_payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     user = get_user(user_id)
+    lang = user.get("lang") or "en"
     user["unlocked"] = True
 
-    await update.message.reply_text(LANG_TEXT[user["lang"]]["paid"])
+    await update.message.reply_text(LANG_TEXT[lang]["paid"])
 
-    answer = await ask_openai(user["case_text"], user["lang"], full=True)
+    answer = await ask_openai(user["case_text"], lang, full=True)
+    user["last_answer"] = answer
 
     for i in range(0, len(answer), 3900):
         await update.message.reply_text(answer[i:i + 3900])
+
+    await update.message.reply_text(LANG_TEXT[lang]["doc_menu"])
+    await send_document_menu(update.message, lang)
 
 
 application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
@@ -388,6 +589,7 @@ application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("help", help_command))
 application.add_handler(CallbackQueryHandler(language_callback, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(unlock_callback, pattern="^unlock$"))
+application.add_handler(CallbackQueryHandler(document_callback, pattern="^doc_"))
 application.add_handler(PreCheckoutQueryHandler(precheckout_callback))
 application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_callback))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
