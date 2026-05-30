@@ -34,6 +34,13 @@ users = {}
 SYSTEM_PROMPT = """
 You are Jurist AI – Consumer Rights & Legal Claims Assistant.
 
+LANGUAGE RULE:
+- If language is Lithuanian, answer ONLY in Lithuanian.
+- If language is English, answer ONLY in English.
+- If language is Norwegian, answer ONLY in Norwegian.
+- Never mix languages.
+- Never use headings from another language.
+
 You help users with:
 - consumer rights
 - refunds
@@ -51,7 +58,7 @@ Rules:
 - Do not claim to be a licensed lawyer.
 - Separate facts from assumptions.
 - Be clear, practical and structured.
-- Answer in the user's selected language.
+- Do not overpromise results.
 """
 
 WELCOME_TEXT = """⚖️ JURIST AI
@@ -70,28 +77,28 @@ Select your language:"""
 
 LANG_TEXT = {
     "lt": {
-        "welcome": WELCOME_TEXT,
         "describe": "📁 Nauja byla\n\nTrumpai aprašykite savo situaciją.\n\nPavyzdžiai:\n\n• Negavau prekės\n• Pardavėjas negrąžina pinigų\n• Įtariamas sukčiavimas\n• Problema su prenumerata\n• Garantinis ginčas\n\nKuo daugiau detalių pateiksite, tuo tikslesnė bus analizė.",
         "thinking": "⏳ Analizuoju...",
         "free_done": "🔎 Tai trumpas nemokamas vertinimas.\n\nNorint gauti pilną analizę, veiksmų planą ir dokumento juodraštį, atrakinkite pilną analizę.",
         "unlock": "🔓 Atrakinti pilną analizę (TEST)" if TEST_MODE else f"🔓 Atrakinti pilną analizę – ⭐{UNLOCK_PRICE_STARS}",
         "paid": "✅ Pilna analizė atrakinta. Ruošiu Jurist AI analizę...",
+        "test": "🧪 TEST REŽIMAS: pilna analizė atrakinta.",
     },
     "en": {
-        "welcome": WELCOME_TEXT,
         "describe": "📁 New case\n\nBriefly describe your situation.\n\nExamples:\n\n• I did not receive my order\n• Seller refuses to refund me\n• Possible fraud or scam\n• Subscription problem\n• Warranty dispute\n\nThe more details you provide, the more accurate the analysis will be.",
         "thinking": "⏳ Analyzing...",
         "free_done": "🔎 This is a short free assessment.\n\nUnlock the full analysis to receive a full review, action plan and document draft.",
         "unlock": "🔓 Unlock full analysis (TEST)" if TEST_MODE else f"🔓 Unlock full analysis – ⭐{UNLOCK_PRICE_STARS}",
         "paid": "✅ Full analysis unlocked. Preparing Jurist AI analysis...",
+        "test": "🧪 TEST MODE: full analysis unlocked.",
     },
     "no": {
-        "welcome": WELCOME_TEXT,
         "describe": "📁 Ny sak\n\nBeskriv kort situasjonen din.\n\nEksempler:\n\n• Jeg mottok ikke varen\n• Selger nekter refusjon\n• Mulig svindel\n• Problem med abonnement\n• Garantitvist\n\nJo flere detaljer du gir, desto mer presis blir analysen.",
         "thinking": "⏳ Analyserer...",
         "free_done": "🔎 Dette er en kort gratis vurdering.\n\nLås opp full analyse for å få komplett vurdering, handlingsplan og dokumentutkast.",
         "unlock": "🔓 Lås opp full analyse (TEST)" if TEST_MODE else f"🔓 Lås opp full analyse – ⭐{UNLOCK_PRICE_STARS}",
         "paid": "✅ Full analyse låst opp. Forbereder Jurist AI-analyse...",
+        "test": "🧪 TESTMODUS: full analyse er låst opp.",
     },
 }
 
@@ -102,17 +109,106 @@ def get_user(user_id):
     return users[user_id]
 
 
-async def ask_openai(user_text, lang, full=False):
+def lang_name(lang):
+    if lang == "lt":
+        return "Lithuanian"
+    if lang == "no":
+        return "Norwegian"
+    return "English"
+
+
+def build_task(user_text, lang, full=False):
+    if lang == "lt":
+        if full:
+            return f"""
+Atsakyk TIK lietuviškai. Nenaudok angliškų antraščių.
+
+Paruošk PILNĄ Jurist AI analizę.
+
+Naudok šią struktūrą:
+
+📋 Situacijos santrauka
+📌 Pagrindiniai faktai
+⚖️ Galimi vartotojų teisių pažeidimai
+📂 Reikalingi įrodymai
+📊 Bylos stiprumo balas 0–100
+🎯 Rekomenduojamas veiksmų planas
+📄 Pretenzijos / skundo juodraštis
+💳 Chargeback galimybė, jei aktualu
+✅ Galutinė išvada
+
+Situacija:
+{user_text}
+"""
+        return f"""
+Atsakyk TIK lietuviškai. Nenaudok angliškų antraščių.
+
+Paruošk TRUMPĄ nemokamą pirminį vertinimą.
+
+Naudok šią struktūrą:
+
+📋 Kategorija
+⚠️ Pagrindinė problema
+📂 Trūkstami įrodymai
+🎯 Pirmas rekomenduojamas veiksmas
+🔓 Pilnos analizės galimybė
+
+Situacija:
+{user_text}
+"""
+
+    if lang == "no":
+        if full:
+            return f"""
+Svar KUN på norsk. Ikke bruk engelske overskrifter.
+
+Lag en FULL Jurist AI-analyse.
+
+Bruk denne strukturen:
+
+📋 Situasjonsoppsummering
+📌 Viktige fakta
+⚖️ Mulige brudd på forbrukerrettigheter
+📂 Nødvendige bevis
+📊 Sakens styrke 0–100
+🎯 Anbefalt handlingsplan
+📄 Utkast til klage / kravbrev
+💳 Chargeback-mulighet hvis relevant
+✅ Endelig konklusjon
+
+Situasjon:
+{user_text}
+"""
+        return f"""
+Svar KUN på norsk. Ikke bruk engelske overskrifter.
+
+Lag en KORT gratis førstevurdering.
+
+Bruk denne strukturen:
+
+📋 Kategori
+⚠️ Hovedproblem
+📂 Manglende bevis
+🎯 Første anbefalte steg
+🔓 Mulighet for full analyse
+
+Situasjon:
+{user_text}
+"""
+
     if full:
-        task = f"""
+        return f"""
+Answer ONLY in English. Do not use Lithuanian or Norwegian headings.
+
 Prepare a FULL Jurist AI analysis.
 
 Use this structure:
+
 📋 Situation summary
 📌 Key facts
 ⚖️ Possible consumer rights violations
 📂 Evidence needed
-📊 Case strength score 0-100
+📊 Case strength score 0–100
 🎯 Recommended action plan
 📄 Draft complaint / claim letter
 💳 Chargeback option if relevant
@@ -121,25 +217,34 @@ Use this structure:
 User situation:
 {user_text}
 """
-    else:
-        task = f"""
+    return f"""
+Answer ONLY in English. Do not use Lithuanian or Norwegian headings.
+
 Prepare a SHORT FREE initial assessment.
 
 Use this structure:
+
 📋 Likely category
 ⚠️ Main issue
 📂 Missing evidence
 🎯 First recommended step
-🔓 Mention that full analysis can be unlocked.
+🔓 Full analysis option
 
 User situation:
 {user_text}
 """
 
+
+async def ask_openai(user_text, lang, full=False):
+    task = build_task(user_text, lang, full)
+
     response = client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT + f"\nSelected language: {lang}"},
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT + f"\nCurrent selected language: {lang_name(lang)}. Reply only in {lang_name(lang)}.",
+            },
             {"role": "user", "content": task},
         ],
     )
@@ -215,7 +320,7 @@ async def unlock_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if TEST_MODE:
         user["unlocked"] = True
-        await query.message.reply_text("🧪 TEST MODE: pilna analizė atrakinta.")
+        await query.message.reply_text(LANG_TEXT[user["lang"]]["test"])
         await query.message.reply_text(LANG_TEXT[user["lang"]]["paid"])
 
         answer = await ask_openai(user["case_text"], user["lang"], full=True)
