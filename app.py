@@ -54,7 +54,7 @@ LANG_TEXT = {
         "describe": "✍️ Trumpai aprašykite savo situaciją.\n\nPvz.: pirkau prekę, jos negavau, pardavėjas neatsako, mokėjau kortele.",
         "thinking": "⏳ Analizuoju...",
         "free_done": "🔎 Tai trumpas nemokamas vertinimas.\n\nNorint gauti pilną analizę, veiksmų planą ir dokumento juodraštį, atrakinkite pilną analizę.",
-        "unlock": f"🔓 Atrakinti pilną analizę – ⭐{UNLOCK_PRICE_STARS}",
+        "unlock": "🔓 Atrakinti pilną analizę (TEST)",
         "paid": "✅ Apmokėjimas gautas. Ruošiu pilną Jurist AI analizę...",
     },
     "en": {
