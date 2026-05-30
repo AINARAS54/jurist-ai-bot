@@ -41,6 +41,17 @@ LANGUAGE RULE:
 - Never mix languages.
 - Never use headings from another language.
 
+GRAMMAR AND STYLE RULE:
+- Write in grammatically correct, natural and professional language.
+- Avoid awkward AI-style phrasing.
+- Use clear full sentences.
+- Do not repeat the same words too often.
+- Do not mix formal and informal tone.
+- In Lithuanian, use correct Lithuanian grammar, punctuation and formal legal-style wording.
+- In English, use clear professional business and legal-style English.
+- In Norwegian, use natural Bokmål.
+- Before finalizing the answer, internally review the text for grammar, clarity and repetition.
+
 IMPORTANT BEHAVIOR RULE:
 - Do NOT tell the user to consult another lawyer, legal professional, consumer rights organization, advisor, or external specialist.
 - Do NOT end answers with generic advice to seek outside consultation.
@@ -168,7 +179,7 @@ def build_task(user_text, lang, full=False):
             return f"""
 Atsakyk TIK lietuviškai. Nenaudok angliškų antraščių.
 
-Paruošk PILNĄ Jurist AI bylos vertinimą.
+Paruošk pilną Jurist AI bylos vertinimą.
 
 Naudok šią struktūrą:
 
@@ -183,12 +194,17 @@ Naudok šią struktūrą:
 ✅ Galutinė išvada
 
 🧭 Kiti klausimai bylai patikslinti
-Pabaigoje sugeneruok 3-5 konkrečius klausimus vartotojui, kurie padėtų geriau aptarnauti bylą.
+Pabaigoje sugeneruok 3-5 konkrečius klausimus vartotojui, kurie padėtų tiksliau tęsti šios bylos nagrinėjimą.
 
 💡 Papildomi pasiūlymai
 Pabaigoje pateik 3 praktinius pasiūlymus, ką vartotojas turėtų padaryti toliau.
 
-Svarbu:
+Stiliaus reikalavimai:
+- Tekstas turi būti gramatiškai taisyklingas.
+- Naudok natūralią, profesionalią lietuvių kalbą.
+- Venk pasikartojančių žodžių ir frazių.
+- Rašyk aiškiais pilnais sakiniais.
+- Dokumentų juodraščiai turi būti formalaus stiliaus.
 - Nekartok žodžio "analizė" per dažnai.
 - Nesiūlyk kreiptis į konsultantus, teisininkus ar kitus specialistus.
 - Jei mini instituciją, nurodyk ją kaip konkretų veiksmą, o ne kaip bendrą konsultaciją.
@@ -199,7 +215,7 @@ Situacija:
         return f"""
 Atsakyk TIK lietuviškai. Nenaudok angliškų antraščių.
 
-Paruošk TRUMPĄ nemokamą pirminį vertinimą.
+Paruošk trumpą nemokamą pirminį vertinimą.
 
 Naudok šią struktūrą:
 
@@ -209,7 +225,11 @@ Naudok šią struktūrą:
 🎯 Pirmas rekomenduojamas veiksmas
 🔓 Išplėstinio atsakymo galimybė
 
-Svarbu:
+Stiliaus reikalavimai:
+- Tekstas turi būti gramatiškai taisyklingas.
+- Naudok natūralią lietuvių kalbą.
+- Venk pasikartojančių žodžių.
+- Rašyk aiškiais pilnais sakiniais.
 - Nekartok žodžio "analizė".
 - Nesiūlyk kreiptis į konsultantus, teisininkus ar kitus specialistus.
 - Pateik aiškų kitą veiksmą pats.
@@ -223,7 +243,7 @@ Situacija:
             return f"""
 Svar KUN på norsk. Ikke bruk engelske overskrifter.
 
-Lag en FULL Jurist AI-vurdering.
+Lag en full Jurist AI-vurdering.
 
 Bruk denne strukturen:
 
@@ -243,7 +263,12 @@ Til slutt, generer 3-5 konkrete spørsmål som kan hjelpe med å håndtere saken
 💡 Ekstra forslag
 Til slutt, gi 3 praktiske forslag til hva brukeren bør gjøre videre.
 
-Viktig:
+Stilkrav:
+- Teksten skal være grammatisk korrekt.
+- Bruk naturlig og profesjonelt bokmål.
+- Unngå gjentakende ord og fraser.
+- Skriv tydelige, fullstendige setninger.
+- Dokumentutkast skal ha formell stil.
 - Ikke gjenta ordet "analyse" for ofte.
 - Ikke anbefal å kontakte rådgivere, advokater eller eksterne spesialister.
 - Hvis du nevner en institusjon, beskriv det som et konkret tiltak.
@@ -254,7 +279,7 @@ Situasjon:
         return f"""
 Svar KUN på norsk. Ikke bruk engelske overskrifter.
 
-Lag en KORT gratis førstevurdering.
+Lag en kort gratis førstevurdering.
 
 Bruk denne strukturen:
 
@@ -264,7 +289,11 @@ Bruk denne strukturen:
 🎯 Første anbefalte steg
 🔓 Mulighet for utvidet svar
 
-Viktig:
+Stilkrav:
+- Teksten skal være grammatisk korrekt.
+- Bruk naturlig bokmål.
+- Unngå gjentakende ord.
+- Skriv tydelige, fullstendige setninger.
 - Ikke gjenta ordet "analyse".
 - Ikke anbefal å kontakte rådgivere, advokater eller eksterne spesialister.
 - Gi et tydelig neste steg selv.
@@ -277,7 +306,7 @@ Situasjon:
         return f"""
 Answer ONLY in English. Do not use Lithuanian or Norwegian headings.
 
-Prepare a FULL Jurist AI case review.
+Prepare a full Jurist AI case review.
 
 Use this structure:
 
@@ -297,7 +326,11 @@ At the end, generate 3-5 specific questions that would help handle the case bett
 💡 Additional suggestions
 At the end, provide 3 practical next-step suggestions.
 
-Important:
+Style requirements:
+- Write in grammatically correct, natural and professional English.
+- Avoid repetitive words and phrases.
+- Use clear, complete sentences.
+- Document drafts must use a formal style.
 - Do not repeat the word "analysis" too often.
 - Do not suggest consulting lawyers, advisors, consumer organizations or external specialists.
 - If you mention an institution, describe it as a concrete action target.
@@ -308,7 +341,7 @@ User situation:
     return f"""
 Answer ONLY in English. Do not use Lithuanian or Norwegian headings.
 
-Prepare a SHORT FREE initial assessment.
+Prepare a short free initial assessment.
 
 Use this structure:
 
@@ -318,7 +351,10 @@ Use this structure:
 🎯 First recommended step
 🔓 Extended response option
 
-Important:
+Style requirements:
+- Write in grammatically correct, natural and professional English.
+- Avoid repetitive words.
+- Use clear, complete sentences.
 - Do not repeat the word "analysis".
 - Do not suggest consulting lawyers, advisors, consumer organizations or external specialists.
 - Provide a clear next step yourself.
@@ -338,7 +374,10 @@ Atsakyk TIK lietuviškai.
 Paruošk dokumentą: {doc}.
 
 Reikalavimai:
-- Dokumentas turi būti formalus, aiškus ir paruoštas kopijavimui.
+- Dokumentas turi būti gramatiškai taisyklingas, oficialaus tono ir paruoštas siųsti.
+- Tekstas turi skambėti kaip žmogaus parašytas oficialus dokumentas.
+- Venk pasikartojančių frazių.
+- Rašyk aiškiai, tiksliai ir dalykiškai.
 - Įtrauk vietas, kur vartotojas turi įrašyti savo duomenis: [Vardas Pavardė], [Adresas], [El. paštas], [Telefonas], [Data].
 - Nesiūlyk kreiptis į konsultantus, teisininkus ar kitus specialistus.
 - Jei trūksta duomenų, naudok laužtinius skliaustus.
@@ -355,7 +394,10 @@ Svar KUN på norsk.
 Lag dokumentet: {doc}.
 
 Krav:
-- Dokumentet skal være formelt, tydelig og klart til kopiering.
+- Dokumentet skal være grammatisk korrekt, formelt og klart til sending.
+- Teksten skal høres ut som et menneskeskrevet offisielt dokument.
+- Unngå gjentakende fraser.
+- Skriv tydelig, presist og saklig.
 - Bruk felter brukeren kan fylle ut: [Navn], [Adresse], [E-post], [Telefon], [Dato].
 - Ikke anbefal å kontakte rådgivere, advokater eller eksterne spesialister.
 - Hvis opplysninger mangler, bruk hakeparenteser.
@@ -371,7 +413,10 @@ Answer ONLY in English.
 Prepare this document: {doc}.
 
 Requirements:
-- The document must be formal, clear and ready to copy.
+- The document must be grammatically correct, formal and ready to send.
+- The text must sound like a human-written official document.
+- Avoid repetitive phrases.
+- Write clearly, precisely and professionally.
 - Include placeholders for user details: [Full name], [Address], [Email], [Phone], [Date].
 - Do not suggest consulting lawyers, advisors or external specialists.
 - If information is missing, use square brackets.
