@@ -34,49 +34,32 @@ users = {}
 SYSTEM_PROMPT = """
 You are Jurist AI - Consumer Rights & Legal Claims Assistant.
 
-LANGUAGE RULE:
-- If language is Lithuanian, answer ONLY in Lithuanian.
-- If language is English, answer ONLY in English.
-- If language is Norwegian, answer ONLY in Norwegian.
+Language:
+- Reply only in the user's selected language.
 - Never mix languages.
-- Never use headings from another language.
 
-GRAMMAR AND STYLE RULE:
-- Write in grammatically correct, natural and professional language.
-- Avoid awkward AI-style phrasing.
-- Use clear full sentences.
-- Do not repeat the same words too often.
-- Do not mix formal and informal tone.
-- In Lithuanian, use correct Lithuanian grammar, punctuation and formal legal-style wording.
-- In English, use clear professional business and legal-style English.
-- In Norwegian, use natural Bokmål.
-- Before finalizing the answer, internally review the text for grammar, clarity and repetition.
-
-IMPORTANT BEHAVIOR RULE:
-- Do NOT tell the user to consult another lawyer, legal professional, consumer rights organization, advisor, or external specialist.
-- Do NOT end answers with generic advice to seek outside consultation.
-- You must provide the best practical next steps yourself.
-- You may mention official institutions only as concrete action targets, for example: bank chargeback department, seller, payment provider, police, consumer authority complaint form.
-- Avoid vague phrases like "consult a specialist" or "seek professional advice".
-
-You help users with:
-- consumer rights
-- refunds
-- chargebacks
-- complaints
-- fraud cases
-- defective products
-- contract disputes
-- online purchases
-- subscription issues
-- warranty disputes
-- evidence analysis
+Style:
+- Use grammatically correct, natural and professional language.
+- Avoid repetition.
+- Use clear complete sentences.
+- Keep answers practical and structured.
 
 Rules:
-- Do not claim to be a licensed lawyer.
+- Do not claim to be a lawyer.
+- Do not suggest consulting lawyers or external specialists.
+- Provide practical next steps yourself.
+- Mention institutions only as concrete action targets.
 - Separate facts from assumptions.
-- Be clear, practical and structured.
-- Do not overpromise results.
+
+Domains:
+- Consumer rights
+- Refunds
+- Payment disputes
+- Complaints
+- Fraud cases
+- Contract disputes
+- Online purchases
+- Warranty issues
 """
 
 WELCOME_TEXT = """⚖️ JURIST AI
@@ -101,6 +84,8 @@ LANG_TEXT = {
         "unlock": "🔓 Atrakinti išplėstinį atsakymą (TEST)" if TEST_MODE else f"🔓 Atrakinti išplėstinį atsakymą - ⭐{UNLOCK_PRICE_STARS}",
         "paid": "✅ Išplėstinis atsakymas paruoštas.",
         "test": "🧪 TEST REŽIMAS: išplėstinis atsakymas atrakintas.",
+        "after_full": "❓ Norite patikslinti bylą?\n\nGalite užduoti papildomą klausimą arba sugeneruoti dokumentą pagal šią bylą.",
+        "ask_prompt": "❓ Parašykite papildomą klausimą dėl šios bylos.",
         "choose_doc": "📄 Pasirinkite, kokį dokumentą norite sugeneruoti:",
         "doc_menu": "📄 Galiu paruošti atskirą dokumentą pagal šią bylą.",
         "no_case": "Pirmiausia aprašykite situaciją.",
@@ -113,6 +98,8 @@ LANG_TEXT = {
         "unlock": "🔓 Unlock extended response (TEST)" if TEST_MODE else f"🔓 Unlock extended response - ⭐{UNLOCK_PRICE_STARS}",
         "paid": "✅ Extended response is ready.",
         "test": "🧪 TEST MODE: extended response unlocked.",
+        "after_full": "❓ Would you like to clarify the case?\n\nYou can ask a follow-up question or generate a document based on this case.",
+        "ask_prompt": "❓ Write your follow-up question about this case.",
         "choose_doc": "📄 Choose which document you want to generate:",
         "doc_menu": "📄 I can prepare a separate document based on this case.",
         "no_case": "Please describe your situation first.",
@@ -125,6 +112,8 @@ LANG_TEXT = {
         "unlock": "🔓 Lås opp utvidet svar (TEST)" if TEST_MODE else f"🔓 Lås opp utvidet svar - ⭐{UNLOCK_PRICE_STARS}",
         "paid": "✅ Utvidet svar er klart.",
         "test": "🧪 TESTMODUS: utvidet svar er låst opp.",
+        "after_full": "❓ Vil du avklare saken videre?\n\nDu kan stille et oppfølgingsspørsmål eller generere et dokument basert på saken.",
+        "ask_prompt": "❓ Skriv oppfølgingsspørsmålet ditt om denne saken.",
         "choose_doc": "📄 Velg hvilket dokument du vil generere:",
         "doc_menu": "📄 Jeg kan lage et eget dokument basert på denne saken.",
         "no_case": "Vennligst beskriv situasjonen din først.",
@@ -140,6 +129,7 @@ def get_user(user_id):
             "case_text": None,
             "unlocked": False,
             "last_answer": None,
+            "awaiting_followup": False,
         }
     return users[user_id]
 
@@ -156,7 +146,7 @@ def document_name(doc_type, lang):
     names = {
         "lt": {
             "seller_claim": "pretenziją pardavėjui",
-            "chargeback": "chargeback prašymą bankui",
+            "chargeback": "prašymą bankui dėl pinigų grąžinimo",
             "authority_complaint": "skundą institucijai",
         },
         "en": {
@@ -177,47 +167,32 @@ def build_task(user_text, lang, full=False):
     if lang == "lt":
         if full:
             return f"""
-Atsakyk TIK lietuviškai. Nenaudok angliškų antraščių.
+Atsakyk tik lietuviškai.
 
-Paruošk pilną Jurist AI bylos vertinimą.
-
-Naudok šią struktūrą:
+Paruošk pilną bylos vertinimą:
 
 📋 Situacijos santrauka
 📌 Pagrindiniai faktai
-⚖️ Galimi vartotojų teisių pažeidimai
+⚖️ Galimi pažeidimai
 📂 Reikalingi įrodymai
-📊 Bylos stiprumo balas 0-100
-🎯 Rekomenduojamas veiksmų planas
+📊 Bylos stiprumas 0-100
+🎯 Veiksmų planas
 📄 Galimi dokumentai
-💳 Chargeback galimybė, jei aktualu
-✅ Galutinė išvada
+💳 Galimybė susigrąžinti pinigus per banką
+✅ Išvada
 
-🧭 Kiti klausimai bylai patikslinti
-Pabaigoje sugeneruok 3-5 konkrečius klausimus vartotojui, kurie padėtų tiksliau tęsti šios bylos nagrinėjimą.
+🧭 3-5 klausimai bylai patikslinti
+💡 3 praktiniai pasiūlymai
 
-💡 Papildomi pasiūlymai
-Pabaigoje pateik 3 praktinius pasiūlymus, ką vartotojas turėtų padaryti toliau.
-
-Stiliaus reikalavimai:
-- Tekstas turi būti gramatiškai taisyklingas.
-- Naudok natūralią, profesionalią lietuvių kalbą.
-- Venk pasikartojančių žodžių ir frazių.
-- Rašyk aiškiais pilnais sakiniais.
-- Dokumentų juodraščiai turi būti formalaus stiliaus.
-- Nekartok žodžio "analizė" per dažnai.
-- Nesiūlyk kreiptis į konsultantus, teisininkus ar kitus specialistus.
-- Jei mini instituciją, nurodyk ją kaip konkretų veiksmą, o ne kaip bendrą konsultaciją.
+Nesiūlyk kreiptis į konsultantus ar teisininkus. Pateik konkrečius veiksmus pats.
 
 Situacija:
 {user_text}
 """
         return f"""
-Atsakyk TIK lietuviškai. Nenaudok angliškų antraščių.
+Atsakyk tik lietuviškai.
 
-Paruošk trumpą nemokamą pirminį vertinimą.
-
-Naudok šią struktūrą:
+Paruošk trumpą pirminį vertinimą:
 
 📋 Kategorija
 ⚠️ Pagrindinė problema
@@ -225,14 +200,7 @@ Naudok šią struktūrą:
 🎯 Pirmas rekomenduojamas veiksmas
 🔓 Išplėstinio atsakymo galimybė
 
-Stiliaus reikalavimai:
-- Tekstas turi būti gramatiškai taisyklingas.
-- Naudok natūralią lietuvių kalbą.
-- Venk pasikartojančių žodžių.
-- Rašyk aiškiais pilnais sakiniais.
-- Nekartok žodžio "analizė".
-- Nesiūlyk kreiptis į konsultantus, teisininkus ar kitus specialistus.
-- Pateik aiškų kitą veiksmą pats.
+Nesiūlyk kreiptis į konsultantus ar teisininkus.
 
 Situacija:
 {user_text}
@@ -241,47 +209,32 @@ Situacija:
     if lang == "no":
         if full:
             return f"""
-Svar KUN på norsk. Ikke bruk engelske overskrifter.
+Svar kun på norsk.
 
-Lag en full Jurist AI-vurdering.
-
-Bruk denne strukturen:
+Lag en full vurdering:
 
 📋 Situasjonsoppsummering
 📌 Viktige fakta
-⚖️ Mulige brudd på forbrukerrettigheter
+⚖️ Mulige brudd
 📂 Nødvendige bevis
 📊 Sakens styrke 0-100
-🎯 Anbefalt handlingsplan
+🎯 Handlingsplan
 📄 Mulige dokumenter
-💳 Chargeback-mulighet hvis relevant
-✅ Endelig konklusjon
+💳 Mulighet for tilbakebetaling via bank
+✅ Konklusjon
 
-🧭 Oppfølgingsspørsmål for å avklare saken
-Til slutt, generer 3-5 konkrete spørsmål som kan hjelpe med å håndtere saken bedre.
+🧭 3-5 oppfølgingsspørsmål
+💡 3 praktiske forslag
 
-💡 Ekstra forslag
-Til slutt, gi 3 praktiske forslag til hva brukeren bør gjøre videre.
-
-Stilkrav:
-- Teksten skal være grammatisk korrekt.
-- Bruk naturlig og profesjonelt bokmål.
-- Unngå gjentakende ord og fraser.
-- Skriv tydelige, fullstendige setninger.
-- Dokumentutkast skal ha formell stil.
-- Ikke gjenta ordet "analyse" for ofte.
-- Ikke anbefal å kontakte rådgivere, advokater eller eksterne spesialister.
-- Hvis du nevner en institusjon, beskriv det som et konkret tiltak.
+Ikke anbefal eksterne rådgivere eller advokater. Gi konkrete tiltak selv.
 
 Situasjon:
 {user_text}
 """
         return f"""
-Svar KUN på norsk. Ikke bruk engelske overskrifter.
+Svar kun på norsk.
 
-Lag en kort gratis førstevurdering.
-
-Bruk denne strukturen:
+Lag en kort førstevurdering:
 
 📋 Kategori
 ⚠️ Hovedproblem
@@ -289,14 +242,7 @@ Bruk denne strukturen:
 🎯 Første anbefalte steg
 🔓 Mulighet for utvidet svar
 
-Stilkrav:
-- Teksten skal være grammatisk korrekt.
-- Bruk naturlig bokmål.
-- Unngå gjentakende ord.
-- Skriv tydelige, fullstendige setninger.
-- Ikke gjenta ordet "analyse".
-- Ikke anbefal å kontakte rådgivere, advokater eller eksterne spesialister.
-- Gi et tydelig neste steg selv.
+Ikke anbefal eksterne rådgivere eller advokater.
 
 Situasjon:
 {user_text}
@@ -304,46 +250,32 @@ Situasjon:
 
     if full:
         return f"""
-Answer ONLY in English. Do not use Lithuanian or Norwegian headings.
+Answer only in English.
 
-Prepare a full Jurist AI case review.
-
-Use this structure:
+Prepare a full case review:
 
 📋 Situation summary
 📌 Key facts
-⚖️ Possible consumer rights violations
+⚖️ Possible violations
 📂 Evidence needed
-📊 Case strength score 0-100
-🎯 Recommended action plan
+📊 Case strength 0-100
+🎯 Action plan
 📄 Possible documents
-💳 Chargeback option if relevant
-✅ Final conclusion
+💳 Bank refund or chargeback option
+✅ Conclusion
 
-🧭 Follow-up questions for case clarification
-At the end, generate 3-5 specific questions that would help handle the case better.
+🧭 3-5 follow-up questions
+💡 3 practical suggestions
 
-💡 Additional suggestions
-At the end, provide 3 practical next-step suggestions.
-
-Style requirements:
-- Write in grammatically correct, natural and professional English.
-- Avoid repetitive words and phrases.
-- Use clear, complete sentences.
-- Document drafts must use a formal style.
-- Do not repeat the word "analysis" too often.
-- Do not suggest consulting lawyers, advisors, consumer organizations or external specialists.
-- If you mention an institution, describe it as a concrete action target.
+Do not suggest external lawyers or advisors. Provide concrete next steps yourself.
 
 User situation:
 {user_text}
 """
     return f"""
-Answer ONLY in English. Do not use Lithuanian or Norwegian headings.
+Answer only in English.
 
-Prepare a short free initial assessment.
-
-Use this structure:
+Prepare a short initial assessment:
 
 📋 Likely category
 ⚠️ Main issue
@@ -351,13 +283,7 @@ Use this structure:
 🎯 First recommended step
 🔓 Extended response option
 
-Style requirements:
-- Write in grammatically correct, natural and professional English.
-- Avoid repetitive words.
-- Use clear, complete sentences.
-- Do not repeat the word "analysis".
-- Do not suggest consulting lawyers, advisors, consumer organizations or external specialists.
-- Provide a clear next step yourself.
+Do not suggest external lawyers or advisors.
 
 User situation:
 {user_text}
@@ -369,19 +295,17 @@ def build_document_task(user_text, lang, doc_type):
 
     if lang == "lt":
         return f"""
-Atsakyk TIK lietuviškai.
+Atsakyk tik lietuviškai.
 
 Paruošk dokumentą: {doc}.
 
 Reikalavimai:
-- Dokumentas turi būti gramatiškai taisyklingas, oficialaus tono ir paruoštas siųsti.
-- Tekstas turi skambėti kaip žmogaus parašytas oficialus dokumentas.
-- Venk pasikartojančių frazių.
-- Rašyk aiškiai, tiksliai ir dalykiškai.
-- Įtrauk vietas, kur vartotojas turi įrašyti savo duomenis: [Vardas Pavardė], [Adresas], [El. paštas], [Telefonas], [Data].
-- Nesiūlyk kreiptis į konsultantus, teisininkus ar kitus specialistus.
+- Oficialus, gramatiškai taisyklingas tekstas.
+- Paruošta siųsti.
+- Naudok laukus: [Vardas Pavardė], [Adresas], [El. paštas], [Telefonas], [Data].
 - Jei trūksta duomenų, naudok laužtinius skliaustus.
-- Dokumento gale pridėk priedų sąrašą.
+- Gale pridėk priedų sąrašą.
+- Nesiūlyk kreiptis į konsultantus ar teisininkus.
 
 Bylos informacija:
 {user_text}
@@ -389,41 +313,80 @@ Bylos informacija:
 
     if lang == "no":
         return f"""
-Svar KUN på norsk.
+Svar kun på norsk.
 
 Lag dokumentet: {doc}.
 
 Krav:
-- Dokumentet skal være grammatisk korrekt, formelt og klart til sending.
-- Teksten skal høres ut som et menneskeskrevet offisielt dokument.
-- Unngå gjentakende fraser.
-- Skriv tydelig, presist og saklig.
-- Bruk felter brukeren kan fylle ut: [Navn], [Adresse], [E-post], [Telefon], [Dato].
-- Ikke anbefal å kontakte rådgivere, advokater eller eksterne spesialister.
-- Hvis opplysninger mangler, bruk hakeparenteser.
-- Legg til en liste over vedlegg nederst.
+- Formelt og grammatisk korrekt.
+- Klart til sending.
+- Bruk felter: [Navn], [Adresse], [E-post], [Telefon], [Dato].
+- Hvis informasjon mangler, bruk hakeparenteser.
+- Legg til vedleggsliste nederst.
+- Ikke anbefal eksterne rådgivere eller advokater.
 
 Saksinformasjon:
 {user_text}
 """
 
     return f"""
-Answer ONLY in English.
+Answer only in English.
 
 Prepare this document: {doc}.
 
 Requirements:
-- The document must be grammatically correct, formal and ready to send.
-- The text must sound like a human-written official document.
-- Avoid repetitive phrases.
-- Write clearly, precisely and professionally.
-- Include placeholders for user details: [Full name], [Address], [Email], [Phone], [Date].
-- Do not suggest consulting lawyers, advisors or external specialists.
+- Formal and grammatically correct.
+- Ready to send.
+- Use placeholders: [Full name], [Address], [Email], [Phone], [Date].
 - If information is missing, use square brackets.
 - Add an attachments list at the end.
+- Do not suggest external lawyers or advisors.
 
 Case information:
 {user_text}
+"""
+
+
+def build_followup_task(case_text, question, lang):
+    if lang == "lt":
+        return f"""
+Atsakyk tik lietuviškai.
+
+Atsakyk į vartotojo papildomą klausimą pagal jau aprašytą bylą.
+Būk konkretus, aiškus ir praktiškas. Nesiūlyk kreiptis į konsultantus ar teisininkus.
+
+Bylos informacija:
+{case_text}
+
+Vartotojo klausimas:
+{question}
+"""
+
+    if lang == "no":
+        return f"""
+Svar kun på norsk.
+
+Svar på brukerens oppfølgingsspørsmål basert på saken.
+Vær konkret, tydelig og praktisk. Ikke anbefal eksterne rådgivere eller advokater.
+
+Saksinformasjon:
+{case_text}
+
+Brukerens spørsmål:
+{question}
+"""
+
+    return f"""
+Answer only in English.
+
+Answer the user's follow-up question based on the case.
+Be clear, concrete and practical. Do not suggest external lawyers or advisors.
+
+Case information:
+{case_text}
+
+User question:
+{question}
 """
 
 
@@ -446,6 +409,23 @@ async def ask_openai(user_text, lang, full=False):
 
 async def ask_openai_document(user_text, lang, doc_type):
     task = build_document_task(user_text, lang, doc_type)
+
+    response = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT + f"\nCurrent selected language: {lang_name(lang)}. Reply only in {lang_name(lang)}.",
+            },
+            {"role": "user", "content": task},
+        ],
+    )
+
+    return response.choices[0].message.content
+
+
+async def ask_openai_followup(case_text, question, lang):
+    task = build_followup_task(case_text, question, lang)
 
     response = client.chat.completions.create(
         model=OPENAI_MODEL,
@@ -491,11 +471,34 @@ async def language_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(LANG_TEXT[lang]["describe"])
 
 
+async def send_after_full_menu(message, lang):
+    if lang == "lt":
+        keyboard = [
+            [InlineKeyboardButton("❓ Užduoti klausimą", callback_data="ask_question")],
+            [InlineKeyboardButton("📄 Generuoti dokumentą", callback_data="show_docs")],
+        ]
+    elif lang == "no":
+        keyboard = [
+            [InlineKeyboardButton("❓ Still spørsmål", callback_data="ask_question")],
+            [InlineKeyboardButton("📄 Generer dokument", callback_data="show_docs")],
+        ]
+    else:
+        keyboard = [
+            [InlineKeyboardButton("❓ Ask a question", callback_data="ask_question")],
+            [InlineKeyboardButton("📄 Generate document", callback_data="show_docs")],
+        ]
+
+    await message.reply_text(
+        LANG_TEXT[lang]["after_full"],
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+
 async def send_document_menu(message, lang):
     if lang == "lt":
         keyboard = [
             [InlineKeyboardButton("📄 Pretenzija pardavėjui", callback_data="doc_seller_claim")],
-            [InlineKeyboardButton("💳 Chargeback prašymas bankui", callback_data="doc_chargeback")],
+            [InlineKeyboardButton("💳 Prašymas bankui dėl pinigų grąžinimo", callback_data="doc_chargeback")],
             [InlineKeyboardButton("⚖️ Skundas institucijai", callback_data="doc_authority_complaint")],
         ]
     elif lang == "no":
@@ -525,21 +528,36 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await start(update, context)
         return
 
+    lang = user["lang"]
+
+    if user.get("awaiting_followup") and user.get("case_text"):
+        user["awaiting_followup"] = False
+        await update.message.reply_text(LANG_TEXT[lang]["thinking"])
+
+        answer = await ask_openai_followup(user["case_text"], update.message.text, lang)
+
+        for i in range(0, len(answer), 3900):
+            await update.message.reply_text(answer[i:i + 3900])
+
+        await send_after_full_menu(update.message, lang)
+        return
+
     user["case_text"] = update.message.text
     user["unlocked"] = False
+    user["awaiting_followup"] = False
 
-    await update.message.reply_text(LANG_TEXT[user["lang"]]["thinking"])
+    await update.message.reply_text(LANG_TEXT[lang]["thinking"])
 
-    answer = await ask_openai(user["case_text"], user["lang"], full=False)
+    answer = await ask_openai(user["case_text"], lang, full=False)
     user["last_answer"] = answer
 
     keyboard = [
-        [InlineKeyboardButton(LANG_TEXT[user["lang"]]["unlock"], callback_data="unlock")]
+        [InlineKeyboardButton(LANG_TEXT[lang]["unlock"], callback_data="unlock")]
     ]
 
     await update.message.reply_text(answer[:3900])
     await update.message.reply_text(
-        LANG_TEXT[user["lang"]]["free_done"],
+        LANG_TEXT[lang]["free_done"],
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
@@ -566,8 +584,7 @@ async def unlock_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for i in range(0, len(answer), 3900):
             await query.message.reply_text(answer[i:i + 3900])
 
-        await query.message.reply_text(LANG_TEXT[lang]["doc_menu"])
-        await send_document_menu(query.message, lang)
+        await send_after_full_menu(query.message, lang)
         return
 
     await context.bot.send_invoice(
@@ -579,6 +596,40 @@ async def unlock_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         currency="XTR",
         prices=[LabeledPrice("Full case review", UNLOCK_PRICE_STARS)],
     )
+
+
+async def ask_question_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    user = get_user(query.from_user.id)
+    lang = user.get("lang") or "en"
+
+    if not user.get("case_text"):
+        await query.message.reply_text(LANG_TEXT[lang]["no_case"])
+        return
+
+    user["awaiting_followup"] = True
+    await query.message.reply_text(LANG_TEXT[lang]["ask_prompt"])
+
+
+async def show_docs_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    user = get_user(query.from_user.id)
+    lang = user.get("lang") or "en"
+
+    if not user.get("case_text"):
+        await query.message.reply_text(LANG_TEXT[lang]["no_case"])
+        return
+
+    if not user.get("unlocked"):
+        await query.message.reply_text(LANG_TEXT[lang]["free_done"])
+        return
+
+    await query.message.reply_text(LANG_TEXT[lang]["doc_menu"])
+    await send_document_menu(query.message, lang)
 
 
 async def document_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -624,8 +675,7 @@ async def successful_payment_callback(update: Update, context: ContextTypes.DEFA
     for i in range(0, len(answer), 3900):
         await update.message.reply_text(answer[i:i + 3900])
 
-    await update.message.reply_text(LANG_TEXT[lang]["doc_menu"])
-    await send_document_menu(update.message, lang)
+    await send_after_full_menu(update.message, lang)
 
 
 application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
@@ -634,6 +684,8 @@ application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("help", help_command))
 application.add_handler(CallbackQueryHandler(language_callback, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(unlock_callback, pattern="^unlock$"))
+application.add_handler(CallbackQueryHandler(ask_question_callback, pattern="^ask_question$"))
+application.add_handler(CallbackQueryHandler(show_docs_callback, pattern="^show_docs$"))
 application.add_handler(CallbackQueryHandler(document_callback, pattern="^doc_"))
 application.add_handler(PreCheckoutQueryHandler(precheckout_callback))
 application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_callback))
