@@ -181,57 +181,20 @@ async def unlock_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = get_user(query.from_user.id)
 
     if not user.get("case_text"):
-        await query.message.reply_text(LANG_TEXT[user["lang"]]["describe"])
+        await query.message.reply_text(
+            LANG_TEXT[user["lang"]]["describe"]
+        )
         return
 
-    await context.bot.send_invoice(
-        chat_id=query.message.chat_id,
-        title="Jurist AI Full Analysis",
-        description="Unlock full Jurist AI consumer rights analysis.",
-        payload=f"jurist_ai_unlock_{query.from_user.id}",
-        provider_token="",
-        currency="XTR",
-        prices=[LabeledPrice("Full analysis", UNLOCK_PRICE_STARS)],
+    await query.message.reply_text(
+        "🧪 TEST MODE: Full analysis unlocked."
     )
 
-async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.pre_checkout_query.answer(ok=True)
-
-async def successful_payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    user = get_user(user_id)
-    user["unlocked"] = True
-
-    await update.message.reply_text(LANG_TEXT[user["lang"]]["paid"])
-
-    answer = await ask_openai(user["case_text"], user["lang"], full=True)
+    answer = await ask_openai(
+        user["case_text"],
+        user["lang"],
+        full=True
+    )
 
     for i in range(0, len(answer), 3900):
-        await update.message.reply_text(answer[i:i + 3900])
-
-application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("help", help_command))
-application.add_handler(CallbackQueryHandler(language_callback, pattern="^lang_"))
-application.add_handler(CallbackQueryHandler(unlock_callback, pattern="^unlock$"))
-application.add_handler(PreCheckoutQueryHandler(precheckout_callback))
-application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_callback))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-asyncio.run(application.bot.set_webhook(url=f"{RENDER_EXTERNAL_URL}/webhook"))
-
-@web_app.get("/")
-def home():
-    return "Jurist AI webhook bot is running."
-
-@web_app.post("/webhook")
-def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
-
-    async def process():
-        async with application:
-            await application.process_update(update)
-
-    asyncio.run(process())
-    return "OK", 200
+        await query.message.reply_text(answer[i:i+3900])
