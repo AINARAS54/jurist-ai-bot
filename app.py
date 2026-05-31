@@ -6,7 +6,11 @@ from datetime import datetime, timezone, timedelta
 
 from flask import Flask, request
 from openai import OpenAI
-from supabase import create_client, Client
+from supabase import create_client, Clienttemp_case_number = f"CASE-{datetime.now().year}-{query.from_user.id}"  await query.edit_message_text(     f"📁 Kuriama nauja byla...
+
+"     f"🆔 Bylos Nr.: {temp_case_number}
+
+"     f"{LANG_TEXT[lang]['describe']}" )
 
 from pypdf import PdfReader
 from docx import Document
