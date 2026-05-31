@@ -90,17 +90,31 @@ Domains:
 
 WELCOME_TEXT = """⚖️ JUSTICE AI
 
-Consumer Rights & Legal Claims Assistant
+Vartotojų teisių apsaugos ir teisinių pretenzijų sistema
 
-I can help you with:
+Padedu spręsti:
 
-📦 Missing or undelivered orders
-💳 Refunds and payment disputes
-📄 Consumer complaints
-⚖️ Contract disputes
-🚨 Fraud and scam cases
+📦 Internetinių pirkimų problemas
+💳 Pinigų grąžinimo ir mokėjimų ginčus
+📄 Pretenzijų ir skundų rengimą
+⚖️ Sutarčių ir paslaugų ginčus
+🚨 Galimus sukčiavimo atvejus
 
-Select your language:"""
+🌍 Pasirinkite pageidaujamą kalbą:"""
+
+SAFETY_TEXT = """🔐 Saugumas ir konfidencialumas
+
+Justice AI gali analizuoti jūsų pateiktą informaciją, dokumentus ir bylos aplinkybes.
+
+Prieš tęsdami žinokite:
+
+• Pateikite tik tuos duomenis, kurie reikalingi bylai.
+• Venkite siųsti perteklinius asmens duomenis.
+• Nepateikite banko kortelės numerių, slaptažodžių, PIN kodų ar prisijungimo duomenų.
+• Jūsų pateikta informacija gali būti saugoma bylos istorijoje, kad būtų galima tęsti vertinimą ir dokumentų rengimą.
+• Naudodamiesi botu patvirtinate, kad suprantate šias sąlygas.
+
+Norėdami tęsti, paspauskite žemiau esantį mygtuką."""
 
 LANG_TEXT = {
     "lt": {
@@ -593,6 +607,21 @@ def extract_text_from_file(file_name, file_bytes):
         return ""
 
 
+async def send_language_menu(message_or_query):
+    keyboard = [
+        [InlineKeyboardButton("🇱🇹 Lietuvių", callback_data="lang_lt")],
+        [InlineKeyboardButton("🇬🇧 English", callback_data="lang_en")],
+        [InlineKeyboardButton("🇳🇴 Norsk", callback_data="lang_no")],
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if hasattr(message_or_query, "edit_message_text"):
+        await message_or_query.edit_message_text(WELCOME_TEXT, reply_markup=reply_markup)
+    else:
+        await message_or_query.reply_text(WELCOME_TEXT, reply_markup=reply_markup)
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
@@ -609,16 +638,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db_user_upsert(update.effective_user)
 
     keyboard = [
-        [InlineKeyboardButton("🇱🇹 Lietuvių", callback_data="lang_lt")],
-        [InlineKeyboardButton("🇬🇧 English", callback_data="lang_en")],
-        [InlineKeyboardButton("🇳🇴 Norsk", callback_data="lang_no")],
+        [InlineKeyboardButton("✅ Suprantu ir sutinku", callback_data="accept_safety")],
     ]
 
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=WELCOME_TEXT,
+        text=SAFETY_TEXT,
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
+
+
+async def accept_safety_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await send_language_menu(query)
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -969,6 +1002,7 @@ application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("help", help_command))
+application.add_handler(CallbackQueryHandler(accept_safety_callback, pattern="^accept_safety$"))
 application.add_handler(CallbackQueryHandler(language_callback, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(plan_callback, pattern="^plan_"))
 application.add_handler(CallbackQueryHandler(ask_question_callback, pattern="^ask_question$"))
