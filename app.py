@@ -613,7 +613,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🇳🇴 Norsk", callback_data="lang_no")],
     ]
 
-    await update.message.reply_text(WELCOME_TEXT, reply_markup=InlineKeyboardMarkup(keyboard))
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=WELCOME_TEXT,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -962,7 +966,7 @@ async def successful_payment_callback(update: Update, context: ContextTypes.DEFA
 
 application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):     user_id = update.effective_user.id      users[user_id] = {         "lang": None,         "case_text": None,         "case_id": None,         "case_number": None,         "unlocked": False,         "last_answer": None,         "awaiting_followup": False,     }      db_user_upsert(update.effective_user)      keyboard = [         [InlineKeyboardButton("🇱🇹 Lietuvių", callback_data="lang_lt")],         [InlineKeyboardButton("🇬🇧 English", callback_data="lang_en")],         [InlineKeyboardButton("🇳🇴 Norsk", callback_data="lang_no")],     ]      await context.bot.send_message(         chat_id=update.effective_chat.id,         text=WELCOME_TEXT,         reply_markup=InlineKeyboardMarkup(keyboard),     )
+application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("help", help_command))
 application.add_handler(CallbackQueryHandler(language_callback, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(plan_callback, pattern="^plan_"))
