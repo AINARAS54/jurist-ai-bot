@@ -3,3 +3,6 @@ openai>=1.0.0
 flask
 gunicorn
 python-dotenv
+supabase
+pypdf
+python-docx
