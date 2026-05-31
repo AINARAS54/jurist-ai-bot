@@ -8,9 +8,6 @@ from flask import Flask, request
 from openai import OpenAI
 from supabase import create_client, Client
 
-"     f"🆔 Bylos Nr.: {temp_case_number}
-
-"     f"{LANG_TEXT[lang]['describe']}" )
 
 from pypdf import PdfReader
 from docx import Document
