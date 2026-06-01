@@ -1,13 +1,11 @@
 import os
 import asyncio
-import base64
 from io import BytesIO
 from datetime import datetime, timezone, timedelta
 
 from flask import Flask, request
 from openai import OpenAI
 from supabase import create_client, Client
-
 
 from pypdf import PdfReader
 from docx import Document
@@ -34,13 +32,10 @@ SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 if not TELEGRAM_BOT_TOKEN:
     raise RuntimeError("Missing TELEGRAM_BOT_TOKEN")
-
 if not OPENAI_API_KEY:
     raise RuntimeError("Missing OPENAI_API_KEY")
-
 if not SUPABASE_URL:
     raise RuntimeError("Missing SUPABASE_URL")
-
 if not SUPABASE_SERVICE_ROLE_KEY:
     raise RuntimeError("Missing SUPABASE_SERVICE_ROLE_KEY")
 
@@ -51,10 +46,10 @@ web_app = Flask(__name__)
 users = {}
 
 PLANS = {
-    "1m": {"months": 1, "stars": 100, "label_lt": "1 mėnuo", "label_en": "1 month", "label_no": "1 måned"},
-    "3m": {"months": 3, "stars": 250, "label_lt": "3 mėnesiai", "label_en": "3 months", "label_no": "3 måneder"},
-    "6m": {"months": 6, "stars": 450, "label_lt": "6 mėnesiai", "label_en": "6 months", "label_no": "6 måneder"},
-    "12m": {"months": 12, "stars": 800, "label_lt": "12 mėnesių", "label_en": "12 months", "label_no": "12 måneder"},
+    "1m": {"months": 1, "stars": 100},
+    "3m": {"months": 3, "stars": 250},
+    "6m": {"months": 6, "stars": 450},
+    "12m": {"months": 12, "stars": 800},
 }
 
 SYSTEM_PROMPT = """
@@ -88,37 +83,102 @@ Domains:
 - Warranty issues
 """
 
-WELCOME_TEXT = """⚖️ JUSTICE AI
+WELCOME_TEXT_LT = """⚖️ JUSTICE AI
 
 Vartotojų teisių apsaugos ir teisinių pretenzijų sistema
 
 Padedu spręsti:
 
 📦 Internetinių pirkimų problemas
-💳 Pinigų grąžinimo ir mokėjimų ginčus
+💳 Pinigų grąžinimo klausimus
 📄 Pretenzijų ir skundų rengimą
 ⚖️ Sutarčių ir paslaugų ginčus
 🚨 Galimus sukčiavimo atvejus
 
 🌍 Pasirinkite pageidaujamą kalbą:"""
 
-SAFETY_TEXT = """🔐 Saugumas ir konfidencialumas
+WELCOME_TEXT_EN = """⚖️ JUSTICE AI
 
-Justice AI gali analizuoti jūsų pateiktą informaciją, dokumentus ir bylos aplinkybes.
+Consumer Rights & Legal Claims Assistant
 
-Prieš tęsdami žinokite:
+I can help you with:
 
-• Pateikite tik tuos duomenis, kurie reikalingi bylai.
-• Venkite siųsti perteklinius asmens duomenis.
-• Nepateikite banko kortelės numerių, slaptažodžių, PIN kodų ar prisijungimo duomenų.
-• Jūsų pateikta informacija gali būti saugoma bylos istorijoje, kad būtų galima tęsti vertinimą ir dokumentų rengimą.
-• Naudodamiesi botu patvirtinate, kad suprantate šias sąlygas.
+📦 Missing or undelivered orders
+💳 Refunds and payment disputes
+📄 Consumer complaints
+⚖️ Contract disputes
+🚨 Fraud and scam cases
 
-Norėdami tęsti, paspauskite žemiau esantį mygtuką."""
+🌍 Select your preferred language:"""
+
+WELCOME_TEXT_NO = """⚖️ JUSTICE AI
+
+Forbrukerrettigheter og juridiske krav
+
+Jeg kan hjelpe med:
+
+📦 Manglende eller ikke leverte varer
+💳 Refusjon og betalingskonflikter
+📄 Klager og kravbrev
+⚖️ Avtale- og tjenestetvister
+🚨 Mulige svindelsaker
+
+🌍 Velg ønsket språk:"""
+
+SAFETY_TEXT_LT = """🔐 Saugumas ir konfidencialumas
+
+Justice AI naudoja pasaulyje pripažintas technologijų platformas:
+
+🤖 OpenAI
+☁️ Supabase
+🌐 Render
+✈️ Telegram
+
+• Visa informacija perduodama saugiu ryšiu.
+• Bylų duomenys saugomi ES infrastruktūroje.
+• Bylų duomenys saugomi iki prenumeratos pabaigos.
+• Pasibaigus prenumeratai, visi bylos duomenys automatiškai ištrinami.
+
+📌 Tęsdami patvirtinate, kad susipažinote su duomenų tvarkymo sąlygomis."""
+
+SAFETY_TEXT_EN = """🔐 Security and confidentiality
+
+Justice AI uses globally recognized technology platforms:
+
+🤖 OpenAI
+☁️ Supabase
+🌐 Render
+✈️ Telegram
+
+• All information is transmitted through a secure connection.
+• Case data is stored in EU infrastructure.
+• Case data is stored until the subscription expires.
+• After the subscription ends, all case data is automatically deleted.
+
+📌 By continuing, you confirm that you have read the data handling terms."""
+
+SAFETY_TEXT_NO = """🔐 Sikkerhet og konfidensialitet
+
+Justice AI bruker anerkjente teknologiplattformer:
+
+🤖 OpenAI
+☁️ Supabase
+🌐 Render
+✈️ Telegram
+
+• All informasjon overføres via sikker tilkobling.
+• Saksdata lagres i EU-infrastruktur.
+• Saksdata lagres til abonnementet utløper.
+• Når abonnementet avsluttes, slettes alle saksdata automatisk.
+
+📌 Ved å fortsette bekrefter du at du har lest vilkårene for databehandling."""
 
 LANG_TEXT = {
     "lt": {
-        "describe": "📁 Nauja byla\n\nTrumpai aprašykite savo situaciją arba įkelkite dokumentą.\n\nPavyzdžiai:\n\n• Negavau prekės\n• Pardavėjas negrąžina pinigų\n• Įtariamas sukčiavimas\n• Problema su prenumerata\n• Garantinis ginčas\n\nKuo daugiau detalių pateiksite, tuo tikslesnė bus išvada.",
+        "welcome": WELCOME_TEXT_LT,
+        "safety": SAFETY_TEXT_LT,
+        "accept": "✅ Suprantu ir sutinku",
+        "describe": "📋 Surinkime duomenis bylai\n\nTrumpai aprašykite savo situaciją arba įkelkite dokumentą.\n\nPavyzdžiai:\n\n• Negavau prekės\n• Pardavėjas negrąžina pinigų\n• Įtariamas sukčiavimas\n• Problema su prenumerata\n• Garantinis ginčas\n\nKuo daugiau detalių pateiksite, tuo tikslesnė bus analizė.",
         "thinking": "⏳ Ruošiu atsakymą...",
         "free_done": "🔎 Tai pirminis bylos vertinimas.\n\nNorint gauti išsamų vertinimą, veiksmų planą ir dokumentų projektus, pasirinkite prieigos laikotarpį.",
         "paid": "✅ Prieiga aktyvuota.",
@@ -130,12 +190,16 @@ LANG_TEXT = {
         "doc_thinking": "⏳ Ruošiu dokumentą...",
         "file_received": "📎 Failas gautas. Bandau nuskaityti turinį ir pridėti prie bylos...",
         "file_saved": "✅ Failas pridėtas prie bylos.",
-        "file_no_text": "⚠️ Failą išsaugojau, bet teksto nuskaityti nepavyko. Galite trumpai aprašyti, kas jame svarbu.",
+        "file_no_text": "⚠️ Failą išsaugojau, bet teksto nuskaityti nepavyko. Trumpai aprašykite, kas jame svarbu.",
         "active_until": "✅ Prieiga aktyvi iki:",
         "choose_plan": "🔓 Pasirinkite prieigos laikotarpį:",
+        "case_created": "📁 Byla sukurta\n\n🆔 Bylos Nr.: {case_number}\n\n⏳ Vertinu pateiktą informaciją...",
     },
     "en": {
-        "describe": "📁 New case\n\nBriefly describe your situation or upload a document.\n\nExamples:\n\n• I did not receive my order\n• Seller refuses to refund me\n• Possible fraud or scam\n• Subscription problem\n• Warranty dispute\n\nThe more details you provide, the more accurate the assessment will be.",
+        "welcome": WELCOME_TEXT_EN,
+        "safety": SAFETY_TEXT_EN,
+        "accept": "✅ I understand and agree",
+        "describe": "📋 Let us collect case information\n\nBriefly describe your situation or upload a document.\n\nExamples:\n\n• I did not receive my order\n• Seller refuses to refund me\n• Possible fraud or scam\n• Subscription problem\n• Warranty dispute\n\nThe more details you provide, the more accurate the assessment will be.",
         "thinking": "⏳ Preparing response...",
         "free_done": "🔎 This is an initial case assessment.\n\nTo receive a full review, action plan and document drafts, choose an access period.",
         "paid": "✅ Access activated.",
@@ -147,12 +211,16 @@ LANG_TEXT = {
         "doc_thinking": "⏳ Preparing document...",
         "file_received": "📎 File received. I will try to read it and add it to the case...",
         "file_saved": "✅ File added to the case.",
-        "file_no_text": "⚠️ I saved the file, but could not extract readable text. Please briefly describe what is important in it.",
+        "file_no_text": "⚠️ I saved the file, but could not extract readable text. Briefly describe what is important in it.",
         "active_until": "✅ Access active until:",
         "choose_plan": "🔓 Choose access period:",
+        "case_created": "📁 Case created\n\n🆔 Case No.: {case_number}\n\n⏳ Reviewing submitted information...",
     },
     "no": {
-        "describe": "📁 Ny sak\n\nBeskriv kort situasjonen din eller last opp et dokument.\n\nEksempler:\n\n• Jeg mottok ikke varen\n• Selger nekter refusjon\n• Mulig svindel\n• Problem med abonnement\n• Garantitvist\n\nJo flere detaljer du gir, desto mer presis blir vurderingen.",
+        "welcome": WELCOME_TEXT_NO,
+        "safety": SAFETY_TEXT_NO,
+        "accept": "✅ Jeg forstår og godtar",
+        "describe": "📋 La oss samle saksinformasjon\n\nBeskriv kort situasjonen din eller last opp et dokument.\n\nEksempler:\n\n• Jeg mottok ikke varen\n• Selger nekter refusjon\n• Mulig svindel\n• Problem med abonnement\n• Garantitvist\n\nJo flere detaljer du gir, desto mer presis blir vurderingen.",
         "thinking": "⏳ Forbereder svar...",
         "free_done": "🔎 Dette er en første vurdering av saken.\n\nFor full vurdering, handlingsplan og dokumentutkast, velg tilgangsperiode.",
         "paid": "✅ Tilgang aktivert.",
@@ -167,6 +235,7 @@ LANG_TEXT = {
         "file_no_text": "⚠️ Filen er lagret, men tekst kunne ikke leses. Beskriv kort hva som er viktig i den.",
         "active_until": "✅ Tilgang aktiv til:",
         "choose_plan": "🔓 Velg tilgangsperiode:",
+        "case_created": "📁 Sak opprettet\n\n🆔 Saksnr.: {case_number}\n\n⏳ Vurderer innsendt informasjon...",
     },
 }
 
@@ -192,10 +261,21 @@ def add_months(months):
     return now_utc() + timedelta(days=30 * months)
 
 
+def detect_language_from_telegram(user):
+    code = (getattr(user, "language_code", "") or "").lower()
+    if code.startswith("lt"):
+        return "lt"
+    if code.startswith("no") or code.startswith("nb") or code.startswith("nn"):
+        return "no"
+    return "en"
+
+
 def get_user_state(user_id):
     if user_id not in users:
         users[user_id] = {
             "lang": None,
+            "detected_lang": "lt",
+            "safety_accepted": False,
             "case_text": None,
             "case_id": None,
             "case_number": None,
@@ -233,7 +313,7 @@ def db_user_upsert(telegram_user, lang=None):
     if existing:
         supabase.table("users").update(data).eq("telegram_id", telegram_user.id).execute()
     else:
-        data["language"] = lang or "lt"
+        data["language"] = lang or detect_language_from_telegram(telegram_user)
         supabase.table("users").insert(data).execute()
 
 
@@ -607,26 +687,34 @@ def extract_text_from_file(file_name, file_bytes):
         return ""
 
 
-async def send_language_menu(message_or_query):
+async def send_language_menu(bot, chat_id=None, lang="lt", edit_query=None):
     keyboard = [
         [InlineKeyboardButton("🇱🇹 Lietuvių", callback_data="lang_lt")],
         [InlineKeyboardButton("🇬🇧 English", callback_data="lang_en")],
         [InlineKeyboardButton("🇳🇴 Norsk", callback_data="lang_no")],
     ]
 
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    text = LANG_TEXT.get(lang, LANG_TEXT["lt"])["welcome"]
 
-    if hasattr(message_or_query, "edit_message_text"):
-        await message_or_query.edit_message_text(WELCOME_TEXT, reply_markup=reply_markup)
-    else:
-        await message_or_query.reply_text(WELCOME_TEXT, reply_markup=reply_markup)
+    if edit_query is not None:
+        await edit_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        return
+
+    await bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    detected_lang = detect_language_from_telegram(update.effective_user)
 
     users[user_id] = {
         "lang": None,
+        "detected_lang": detected_lang,
+        "safety_accepted": False,
         "case_text": None,
         "case_id": None,
         "case_number": None,
@@ -635,15 +723,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "awaiting_followup": False,
     }
 
-    db_user_upsert(update.effective_user)
+    db_user_upsert(update.effective_user, detected_lang)
 
-    keyboard = [
-        [InlineKeyboardButton("✅ Suprantu ir sutinku", callback_data="accept_safety")],
-    ]
+    keyboard = [[InlineKeyboardButton(LANG_TEXT[detected_lang]["accept"], callback_data="accept_safety")]]
 
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=SAFETY_TEXT,
+        text=LANG_TEXT[detected_lang]["safety"],
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
@@ -651,7 +737,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def accept_safety_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await send_language_menu(query)
+
+    user = get_user_state(query.from_user.id)
+    detected_lang = user.get("detected_lang") or detect_language_from_telegram(query.from_user)
+
+    user["safety_accepted"] = True
+
+    await send_language_menu(None, lang=detected_lang, edit_query=query)
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -665,6 +757,12 @@ async def language_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     user = get_user_state(query.from_user.id)
+
+    if not user.get("safety_accepted"):
+        detected_lang = user.get("detected_lang") or detect_language_from_telegram(query.from_user)
+        await query.message.reply_text(LANG_TEXT[detected_lang]["safety"])
+        return
+
     lang = query.data.replace("lang_", "")
     user["lang"] = lang
 
@@ -750,8 +848,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     user = get_user_state(user_id)
 
-    if not user["lang"]:
+    if not user.get("safety_accepted"):
         await start(update, context)
+        return
+
+    if not user["lang"]:
+        await send_language_menu(context.bot, chat_id=update.effective_chat.id, lang=user.get("detected_lang", "lt"))
         return
 
     lang = user["lang"]
@@ -775,12 +877,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user["case_id"] = case_id
     user["case_number"] = case_number
 
+    await update.message.reply_text(LANG_TEXT[lang]["case_created"].format(case_number=case_number))
+
     active, until = db_subscription_active(user_id)
 
     if active:
         user["unlocked"] = True
         await update.message.reply_text(f"{LANG_TEXT[lang]['active_until']} {until.date()}")
-        await update.message.reply_text(LANG_TEXT[lang]["thinking"])
 
         full_text = f"Bylos numeris: {case_number}\n\n{user['case_text']}"
         answer = await ask_openai(full_text, lang, full=True)
@@ -790,8 +893,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await send_after_full_menu(update.message, lang)
         return
-
-    await update.message.reply_text(LANG_TEXT[lang]["thinking"])
 
     answer = await ask_openai(user["case_text"], lang, full=False)
     user["last_answer"] = answer
@@ -805,8 +906,12 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     user = get_user_state(user_id)
 
-    if not user["lang"]:
+    if not user.get("safety_accepted"):
         await start(update, context)
+        return
+
+    if not user["lang"]:
+        await send_language_menu(context.bot, chat_id=update.effective_chat.id, lang=user.get("detected_lang", "lt"))
         return
 
     lang = user["lang"]
@@ -843,6 +948,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user["case_id"] = case_id
         user["case_number"] = case_number
         user["case_text"] = base_text
+        await update.message.reply_text(LANG_TEXT[lang]["case_created"].format(case_number=case_number))
 
     db_add_case_file(user["case_id"], file_name, file_type, file_id)
 
