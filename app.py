@@ -46,10 +46,10 @@ web_app = Flask(__name__)
 users = {}
 
 PLANS = {
-    "1m": {"months": 1, "stars": 100},
-    "3m": {"months": 3, "stars": 250},
-    "6m": {"months": 6, "stars": 450},
-    "12m": {"months": 12, "stars": 800},
+    "1m": {"months": 1, "stars": 100, "label_lt": "1 mėnuo", "label_en": "1 month", "label_no": "1 måned"},
+    "3m": {"months": 3, "stars": 250, "label_lt": "3 mėnesiai", "label_en": "3 months", "label_no": "3 måneder"},
+    "6m": {"months": 6, "stars": 450, "label_lt": "6 mėnesiai", "label_en": "6 months", "label_no": "6 måneder"},
+    "12m": {"months": 12, "stars": 800, "label_lt": "12 mėnesių", "label_en": "12 months", "label_no": "12 måneder"},
 }
 
 SYSTEM_PROMPT = """
@@ -59,11 +59,18 @@ Language:
 - Reply only in the user's selected language.
 - Never mix languages.
 
+Legal logic:
+- Apply the selected jurisdiction/country to the case.
+- Always include relevant law names and article/section numbers when possible.
+- Never state that a crime definitely occurred.
+- Use cautious wording: potentially applicable, may be relevant, may be assessed under.
+
 Style:
 - Use grammatically correct, natural and professional language.
 - Avoid repetition.
 - Use clear complete sentences.
 - Keep answers practical and structured.
+- In Lithuanian, avoid the word "normaliai" in legal explanations; use "įprastai", "pagal paskirtį" or "įprastomis naudojimo sąlygomis".
 
 Rules:
 - Do not claim to be a lawyer.
@@ -72,113 +79,70 @@ Rules:
 - Mention institutions only as concrete action targets.
 - Separate facts from assumptions.
 
-Domains:
-- Consumer rights
-- Refunds
-- Payment disputes
-- Complaints
-- Fraud cases
-- Contract disputes
-- Online purchases
-- Warranty issues
+Documents:
+- Do not use greetings such as Gerbiamasis, Gerbiamoji, Gerb. pone, Gerb. ponia, Dear Sir/Madam.
+- Start documents with the recipient name and document title.
+- Do not write [Paraiška pridedama].
+- If attachments are relevant, use a separate section named Priedai / Attachments / Vedlegg.
 """
 
-WELCOME_TEXT_LT = """⚖️ JUSTICE AI
+WELCOME_TEXT = {
+    "lt": """⚖️ JUSTICE AI
 
-Vartotojų teisių apsaugos ir teisinių pretenzijų sistema
+Vartotojų teisių apsaugos ir teisinių pretenzijų sistema""",
+    "en": """⚖️ JUSTICE AI
 
-Padedu spręsti:
+Consumer Rights & Legal Claims Assistant""",
+    "no": """⚖️ JUSTICE AI
 
-📦 Internetinių pirkimų problemas
-💳 Pinigų grąžinimo klausimus
-📄 Pretenzijų ir skundų rengimą
-⚖️ Sutarčių ir paslaugų ginčus
-🚨 Galimus sukčiavimo atvejus
+Assistent for forbrukerrettigheter og juridiske krav""",
+}
 
-🌍 Pasirinkite pageidaujamą kalbą:"""
+SAFETY_TEXT = {
+    "lt": """🔐 Saugumas ir konfidencialumas
 
-WELCOME_TEXT_EN = """⚖️ JUSTICE AI
-
-Consumer Rights & Legal Claims Assistant
-
-I can help you with:
-
-📦 Missing or undelivered orders
-💳 Refunds and payment disputes
-📄 Consumer complaints
-⚖️ Contract disputes
-🚨 Fraud and scam cases
-
-🌍 Select your preferred language:"""
-
-WELCOME_TEXT_NO = """⚖️ JUSTICE AI
-
-Forbrukerrettigheter og juridiske krav
-
-Jeg kan hjelpe med:
-
-📦 Manglende eller ikke leverte varer
-💳 Refusjon og betalingskonflikter
-📄 Klager og kravbrev
-⚖️ Avtale- og tjenestetvister
-🚨 Mulige svindelsaker
-
-🌍 Velg ønsket språk:"""
-
-SAFETY_TEXT_LT = """🔐 Saugumas ir konfidencialumas
-
-Justice AI naudoja pasaulyje pripažintas technologijų platformas:
+Naudojamos platformos:
 
 🤖 OpenAI
 ☁️ Supabase
 🌐 Render
 ✈️ Telegram
 
-• Visa informacija perduodama saugiu ryšiu.
-• Bylų duomenys saugomi ES infrastruktūroje.
-• Bylų duomenys saugomi iki prenumeratos pabaigos.
-• Pasibaigus prenumeratai, visi bylos duomenys automatiškai ištrinami.
+• Duomenys saugomi ES infrastruktūroje.
+• Duomenys saugomi iki prenumeratos pabaigos.
+• Pasibaigus prenumeratai, duomenys ištrinami.""",
+    "en": """🔐 Security and confidentiality
 
-📌 Tęsdami patvirtinate, kad susipažinote su duomenų tvarkymo sąlygomis."""
-
-SAFETY_TEXT_EN = """🔐 Security and confidentiality
-
-Justice AI uses globally recognized technology platforms:
+Platforms used:
 
 🤖 OpenAI
 ☁️ Supabase
 🌐 Render
 ✈️ Telegram
 
-• All information is transmitted through a secure connection.
-• Case data is stored in EU infrastructure.
-• Case data is stored until the subscription expires.
-• After the subscription ends, all case data is automatically deleted.
+• Data is stored in EU infrastructure.
+• Data is stored until the subscription ends.
+• After the subscription ends, data is deleted.""",
+    "no": """🔐 Sikkerhet og konfidensialitet
 
-📌 By continuing, you confirm that you have read the data handling terms."""
-
-SAFETY_TEXT_NO = """🔐 Sikkerhet og konfidensialitet
-
-Justice AI bruker anerkjente teknologiplattformer:
+Plattformer som brukes:
 
 🤖 OpenAI
 ☁️ Supabase
 🌐 Render
 ✈️ Telegram
 
-• All informasjon overføres via sikker tilkobling.
-• Saksdata lagres i EU-infrastruktur.
-• Saksdata lagres til abonnementet utløper.
-• Når abonnementet avsluttes, slettes alle saksdata automatisk.
-
-📌 Ved å fortsette bekrefter du at du har lest vilkårene for databehandling."""
+• Data lagres i EU-infrastruktur.
+• Data lagres til abonnementet utløper.
+• Etter at abonnementet utløper, slettes data.""",
+}
 
 LANG_TEXT = {
     "lt": {
-        "welcome": WELCOME_TEXT_LT,
-        "safety": SAFETY_TEXT_LT,
         "accept": "✅ Suprantu ir sutinku",
-        "describe": "📋 Surinkime duomenis bylai\n\nTrumpai aprašykite savo situaciją arba įkelkite dokumentą.\n\nPavyzdžiai:\n\n• Negavau prekės\n• Pardavėjas negrąžina pinigų\n• Įtariamas sukčiavimas\n• Problema su prenumerata\n• Garantinis ginčas\n\nKuo daugiau detalių pateiksite, tuo tikslesnė bus analizė.",
+        "choose_country": "🌍 Pasirinkite šalį:",
+        "describe": "📋 Surinkime duomenis bylai\n\nTrumpai aprašykite situaciją arba įkelkite dokumentą.\n\nPavyzdžiai:\n\n• Negavau prekės\n• Pardavėjas negrąžina pinigų\n• Įtariamas sukčiavimas\n• Problema su prenumerata\n• Garantinis ginčas\n\nKuo daugiau informacijos pateiksite, tuo tikslesnė bus analizė.",
+        "case_created": "📁 Byla sukurta",
         "thinking": "⏳ Ruošiu atsakymą...",
         "free_done": "🔎 Tai pirminis bylos vertinimas.\n\nNorint gauti išsamų vertinimą, veiksmų planą ir dokumentų projektus, pasirinkite prieigos laikotarpį.",
         "paid": "✅ Prieiga aktyvuota.",
@@ -190,16 +154,15 @@ LANG_TEXT = {
         "doc_thinking": "⏳ Ruošiu dokumentą...",
         "file_received": "📎 Failas gautas. Bandau nuskaityti turinį ir pridėti prie bylos...",
         "file_saved": "✅ Failas pridėtas prie bylos.",
-        "file_no_text": "⚠️ Failą išsaugojau, bet teksto nuskaityti nepavyko. Trumpai aprašykite, kas jame svarbu.",
+        "file_no_text": "⚠️ Failą išsaugojau, bet teksto nuskaityti nepavyko. Galite trumpai aprašyti, kas jame svarbu.",
         "active_until": "✅ Prieiga aktyvi iki:",
         "choose_plan": "🔓 Pasirinkite prieigos laikotarpį:",
-        "case_created": "📁 Byla sukurta\n\n🆔 Bylos Nr.: {case_number}\n\n⏳ Vertinu pateiktą informaciją...",
     },
     "en": {
-        "welcome": WELCOME_TEXT_EN,
-        "safety": SAFETY_TEXT_EN,
         "accept": "✅ I understand and agree",
-        "describe": "📋 Let us collect case information\n\nBriefly describe your situation or upload a document.\n\nExamples:\n\n• I did not receive my order\n• Seller refuses to refund me\n• Possible fraud or scam\n• Subscription problem\n• Warranty dispute\n\nThe more details you provide, the more accurate the assessment will be.",
+        "choose_country": "🌍 Choose country:",
+        "describe": "📋 Let us collect case details\n\nBriefly describe the situation or upload a document.\n\nExamples:\n\n• I did not receive my order\n• Seller refuses to refund me\n• Possible fraud or scam\n• Subscription problem\n• Warranty dispute\n\nThe more information you provide, the more accurate the review will be.",
+        "case_created": "📁 Case created",
         "thinking": "⏳ Preparing response...",
         "free_done": "🔎 This is an initial case assessment.\n\nTo receive a full review, action plan and document drafts, choose an access period.",
         "paid": "✅ Access activated.",
@@ -211,16 +174,15 @@ LANG_TEXT = {
         "doc_thinking": "⏳ Preparing document...",
         "file_received": "📎 File received. I will try to read it and add it to the case...",
         "file_saved": "✅ File added to the case.",
-        "file_no_text": "⚠️ I saved the file, but could not extract readable text. Briefly describe what is important in it.",
+        "file_no_text": "⚠️ I saved the file, but could not extract readable text. Please briefly describe what is important in it.",
         "active_until": "✅ Access active until:",
         "choose_plan": "🔓 Choose access period:",
-        "case_created": "📁 Case created\n\n🆔 Case No.: {case_number}\n\n⏳ Reviewing submitted information...",
     },
     "no": {
-        "welcome": WELCOME_TEXT_NO,
-        "safety": SAFETY_TEXT_NO,
-        "accept": "✅ Jeg forstår og godtar",
-        "describe": "📋 La oss samle saksinformasjon\n\nBeskriv kort situasjonen din eller last opp et dokument.\n\nEksempler:\n\n• Jeg mottok ikke varen\n• Selger nekter refusjon\n• Mulig svindel\n• Problem med abonnement\n• Garantitvist\n\nJo flere detaljer du gir, desto mer presis blir vurderingen.",
+        "accept": "✅ Jeg forstår og samtykker",
+        "choose_country": "🌍 Velg land:",
+        "describe": "📋 La oss samle saksinformasjon\n\nBeskriv kort situasjonen eller last opp et dokument.\n\nEksempler:\n\n• Jeg mottok ikke varen\n• Selger nekter refusjon\n• Mulig svindel\n• Problem med abonnement\n• Garantitvist\n\nJo mer informasjon du gir, desto mer presis blir vurderingen.",
+        "case_created": "📁 Sak opprettet",
         "thinking": "⏳ Forbereder svar...",
         "free_done": "🔎 Dette er en første vurdering av saken.\n\nFor full vurdering, handlingsplan og dokumentutkast, velg tilgangsperiode.",
         "paid": "✅ Tilgang aktivert.",
@@ -235,8 +197,14 @@ LANG_TEXT = {
         "file_no_text": "⚠️ Filen er lagret, men tekst kunne ikke leses. Beskriv kort hva som er viktig i den.",
         "active_until": "✅ Tilgang aktiv til:",
         "choose_plan": "🔓 Velg tilgangsperiode:",
-        "case_created": "📁 Sak opprettet\n\n🆔 Saksnr.: {case_number}\n\n⏳ Vurderer innsendt informasjon...",
     },
+}
+
+JURISDICTIONS = {
+    "lt": {"lt": "Lietuva", "en": "Lithuania", "no": "Litauen"},
+    "no": {"lt": "Norvegija", "en": "Norway", "no": "Norge"},
+    "eu": {"lt": "ES", "en": "EU", "no": "EU"},
+    "uk": {"lt": "Jungtinė Karalystė", "en": "United Kingdom", "no": "Storbritannia"},
 }
 
 
@@ -261,8 +229,8 @@ def add_months(months):
     return now_utc() + timedelta(days=30 * months)
 
 
-def detect_language_from_telegram(user):
-    code = (getattr(user, "language_code", "") or "").lower()
+def detect_language_from_telegram(telegram_user):
+    code = (getattr(telegram_user, "language_code", None) or "").lower()
     if code.startswith("lt"):
         return "lt"
     if code.startswith("no") or code.startswith("nb") or code.startswith("nn"):
@@ -274,8 +242,7 @@ def get_user_state(user_id):
     if user_id not in users:
         users[user_id] = {
             "lang": None,
-            "detected_lang": "lt",
-            "safety_accepted": False,
+            "jurisdiction": None,
             "case_text": None,
             "case_id": None,
             "case_number": None,
@@ -292,6 +259,10 @@ def lang_name(lang):
     if lang == "no":
         return "Norwegian"
     return "English"
+
+
+def jurisdiction_name(jurisdiction, lang):
+    return JURISDICTIONS.get(jurisdiction, JURISDICTIONS["lt"]).get(lang, JURISDICTIONS[jurisdiction].get("en", "Lithuania"))
 
 
 def db_user_get(telegram_id):
@@ -313,7 +284,7 @@ def db_user_upsert(telegram_user, lang=None):
     if existing:
         supabase.table("users").update(data).eq("telegram_id", telegram_user.id).execute()
     else:
-        data["language"] = lang or detect_language_from_telegram(telegram_user)
+        data["language"] = lang or "lt"
         supabase.table("users").insert(data).execute()
 
 
@@ -360,19 +331,14 @@ def db_create_case(telegram_id, case_text):
     case_id = case["id"]
     case_number = f"CASE-{now_utc().year}-{case_id:06d}"
 
-    supabase.table("cases").update({
-        "case_number": case_number
-    }).eq("id", case_id).execute()
-
+    supabase.table("cases").update({"case_number": case_number}).eq("id", case_id).execute()
     return case_id, case_number
 
 
 def db_update_case(case_id, case_text):
     if not case_id:
         return
-    supabase.table("cases").update({
-        "case_text": case_text
-    }).eq("id", case_id).execute()
+    supabase.table("cases").update({"case_text": case_text}).eq("id", case_id).execute()
 
 
 def db_add_case_file(case_id, file_name, file_type, telegram_file_id):
@@ -410,18 +376,48 @@ def document_name(doc_type, lang):
     return names.get(lang, names["en"]).get(doc_type, "document")
 
 
-def build_task(user_text, lang, full=False):
+def legal_sources_instruction(lang, jurisdiction):
+    j = jurisdiction_name(jurisdiction, lang)
+    if lang == "lt":
+        return f"""
+Taikoma šalis: {j}.
+Visada pridėk skyrių "⚖️ Galimai taikytini teisės aktai".
+Nurodyk įstatymo pavadinimą, straipsnio arba paragrafo numerį ir trumpą ryšį su byla.
+Jei galimas sukčiavimas ar kita nusikalstama veika, rašyk tik atsargiai: "gali būti aktualu", "galimai taikytina", "gali būti vertinama pagal".
+Niekada neteigk, kad nusikaltimas tikrai įvykdytas.
+"""
+    if lang == "no":
+        return f"""
+Valgt land: {j}.
+Ta alltid med delen "⚖️ Mulig relevante lover".
+Oppgi lovnavn, paragraf/section og kort forklaring.
+Ved mulig svindel, bruk forsiktige formuleringer som "kan være relevant" eller "kan vurderes etter".
+Ikke si at en straffbar handling definitivt har skjedd.
+"""
+    return f"""
+Selected jurisdiction: {j}.
+Always include a section "⚖️ Potentially applicable laws".
+List law names, article/section numbers and a short link to the case.
+For possible fraud or crime, use cautious wording such as "may be relevant" or "may be assessed under".
+Never state that a crime definitely occurred.
+"""
+
+
+def build_task(user_text, lang, jurisdiction, full=False):
+    legal = legal_sources_instruction(lang, jurisdiction)
+
     if lang == "lt":
         if full:
             return f"""
 Atsakyk tik lietuviškai.
-
+{legal}
 Paruošk pilną bylos vertinimą:
 
-📁 Bylos numeris, jei pateiktas
+📁 Bylos numeris
 📋 Situacijos santrauka
 📌 Pagrindiniai faktai
-⚖️ Galimi pažeidimai
+⚖️ Galimai taikytini teisės aktai
+⚠️ Galimi pažeidimai
 📂 Reikalingi įrodymai
 📊 Bylos stiprumas 0-100
 🎯 Veiksmų planas
@@ -429,26 +425,31 @@ Paruošk pilną bylos vertinimą:
 💳 Galimybė susigrąžinti pinigus per banką
 ✅ Išvada
 
-🧭 3-5 klausimai bylai patikslinti
-💡 3 praktiniai pasiūlymai
+🧭 Klausimai bylai patikslinti
+Pateik ne daugiau kaip 2 svarbiausius klausimus. Jei klausimai nebūtini, šio skyriaus nerodyk.
+
+💡 Praktiniai pasiūlymai
+Pateik ne daugiau kaip 2 svarbiausius pasiūlymus.
 
 Nesiūlyk kreiptis į konsultantus ar teisininkus. Pateik konkrečius veiksmus pats.
+Venk žodžio "normaliai". Naudok "įprastai", "pagal paskirtį" arba "įprastomis naudojimo sąlygomis".
 
 Bylos informacija:
 {user_text}
 """
         return f"""
 Atsakyk tik lietuviškai.
-
+{legal}
 Paruošk trumpą pirminį vertinimą:
 
 📋 Kategorija
 ⚠️ Pagrindinė problema
+⚖️ Galimai taikytini teisės aktai
 📂 Trūkstami įrodymai
 🎯 Pirmas rekomenduojamas veiksmas
 🔓 Išplėstinio atsakymo galimybė
 
-Nesiūlyk kreiptis į konsultantus ar teisininkus.
+Nesiūlyk kreiptis į konsultantus ar teisininkus. Venk žodžio "normaliai".
 
 Situacija:
 {user_text}
@@ -458,12 +459,14 @@ Situacija:
         if full:
             return f"""
 Svar kun på norsk.
-
+{legal}
 Lag en full vurdering:
 
+📁 Saksnummer
 📋 Situasjonsoppsummering
 📌 Viktige fakta
-⚖️ Mulige brudd
+⚖️ Mulig relevante lover
+⚠️ Mulige brudd
 📂 Nødvendige bevis
 📊 Sakens styrke 0-100
 🎯 Handlingsplan
@@ -471,8 +474,8 @@ Lag en full vurdering:
 💳 Mulighet for tilbakebetaling via bank
 ✅ Konklusjon
 
-🧭 3-5 oppfølgingsspørsmål
-💡 3 praktiske forslag
+🧭 Maks 2 oppfølgingsspørsmål
+💡 Maks 2 praktiske forslag
 
 Ikke anbefal eksterne rådgivere eller advokater. Gi konkrete tiltak selv.
 
@@ -481,11 +484,12 @@ Saksinformasjon:
 """
         return f"""
 Svar kun på norsk.
-
+{legal}
 Lag en kort førstevurdering:
 
 📋 Kategori
 ⚠️ Hovedproblem
+⚖️ Mulig relevante lover
 📂 Manglende bevis
 🎯 Første anbefalte steg
 🔓 Mulighet for utvidet svar
@@ -499,12 +503,14 @@ Situasjon:
     if full:
         return f"""
 Answer only in English.
-
+{legal}
 Prepare a full case review:
 
+📁 Case number
 📋 Situation summary
 📌 Key facts
-⚖️ Possible violations
+⚖️ Potentially applicable laws
+⚠️ Possible violations
 📂 Evidence needed
 📊 Case strength 0-100
 🎯 Action plan
@@ -512,8 +518,8 @@ Prepare a full case review:
 💳 Bank refund option
 ✅ Conclusion
 
-🧭 3-5 follow-up questions
-💡 3 practical suggestions
+🧭 Max 2 follow-up questions
+💡 Max 2 practical suggestions
 
 Do not suggest external lawyers or advisors. Provide concrete next steps yourself.
 
@@ -522,11 +528,12 @@ Case information:
 """
     return f"""
 Answer only in English.
-
+{legal}
 Prepare a short initial assessment:
 
 📋 Likely category
 ⚠️ Main issue
+⚖️ Potentially applicable laws
 📂 Missing evidence
 🎯 First recommended step
 🔓 Extended response option
@@ -538,22 +545,27 @@ User situation:
 """
 
 
-def build_document_task(user_text, lang, doc_type):
+def build_document_task(user_text, lang, doc_type, jurisdiction):
     doc = document_name(doc_type, lang)
+    legal = legal_sources_instruction(lang, jurisdiction)
 
     if lang == "lt":
         return f"""
 Atsakyk tik lietuviškai.
-
+{legal}
 Paruošk dokumentą: {doc}.
 
 Reikalavimai:
+- Dokumentą pradėk nuo gavėjo pavadinimo ir dokumento antraštės.
+- Nenaudok kreipinių: Gerbiamasis, Gerbiamoji, Gerb. pone, Gerb. ponia.
 - Oficialus, gramatiškai taisyklingas tekstas.
 - Paruošta siųsti.
 - Naudok laukus: [Vardas Pavardė], [Adresas], [El. paštas], [Telefonas], [Data].
 - Jei trūksta duomenų, naudok laužtinius skliaustus.
-- Gale pridėk priedų sąrašą.
+- Nerašyk [Paraiška pridedama].
+- Jei yra priedų, naudok atskirą skyrių "Priedai:". Jei priedų nėra, šio skyriaus nerodyk.
 - Nesiūlyk kreiptis į konsultantus ar teisininkus.
+- Venk žodžio "normaliai". Naudok "įprastai", "pagal paskirtį" arba "įprastomis naudojimo sąlygomis".
 
 Bylos informacija:
 {user_text}
@@ -562,15 +574,17 @@ Bylos informacija:
     if lang == "no":
         return f"""
 Svar kun på norsk.
-
+{legal}
 Lag dokumentet: {doc}.
 
 Krav:
+- Start med mottakerens navn og dokumenttittel.
+- Ikke bruk generiske hilsener.
 - Formelt og grammatisk korrekt.
 - Klart til sending.
 - Bruk felter: [Navn], [Adresse], [E-post], [Telefon], [Dato].
 - Hvis informasjon mangler, bruk hakeparenteser.
-- Legg til vedleggsliste nederst.
+- Hvis vedlegg er relevante, bruk en egen del "Vedlegg:". Hvis ikke, ikke vis den delen.
 - Ikke anbefal eksterne rådgivere eller advokater.
 
 Saksinformasjon:
@@ -579,15 +593,17 @@ Saksinformasjon:
 
     return f"""
 Answer only in English.
-
+{legal}
 Prepare this document: {doc}.
 
 Requirements:
+- Start with recipient name and document title.
+- Do not use greetings such as Dear Sir/Madam.
 - Formal and grammatically correct.
 - Ready to send.
 - Use placeholders: [Full name], [Address], [Email], [Phone], [Date].
 - If information is missing, use square brackets.
-- Add an attachments list at the end.
+- If attachments are relevant, use a separate section "Attachments:". If not, do not show it.
 - Do not suggest external lawyers or advisors.
 
 Case information:
@@ -595,11 +611,12 @@ Case information:
 """
 
 
-def build_followup_task(case_text, question, lang):
+def build_followup_task(case_text, question, lang, jurisdiction):
+    legal = legal_sources_instruction(lang, jurisdiction)
     if lang == "lt":
         return f"""
 Atsakyk tik lietuviškai.
-
+{legal}
 Atsakyk į vartotojo papildomą klausimą pagal šią bylą.
 Būk konkretus, aiškus ir praktiškas. Nesiūlyk kreiptis į konsultantus ar teisininkus.
 
@@ -609,11 +626,10 @@ Bylos informacija:
 Klausimas:
 {question}
 """
-
     if lang == "no":
         return f"""
 Svar kun på norsk.
-
+{legal}
 Svar på brukerens oppfølgingsspørsmål basert på saken.
 Vær konkret, tydelig og praktisk. Ikke anbefal eksterne rådgivere eller advokater.
 
@@ -623,10 +639,9 @@ Saksinformasjon:
 Spørsmål:
 {question}
 """
-
     return f"""
 Answer only in English.
-
+{legal}
 Answer the user's follow-up question based on the case.
 Be clear, concrete and practical. Do not suggest external lawyers or advisors.
 
@@ -652,69 +667,44 @@ async def ask_openai_task(task, lang):
     return response.choices[0].message.content
 
 
-async def ask_openai(user_text, lang, full=False):
-    return await ask_openai_task(build_task(user_text, lang, full), lang)
+async def ask_openai(user_text, lang, jurisdiction, full=False):
+    return await ask_openai_task(build_task(user_text, lang, jurisdiction, full), lang)
 
 
-async def ask_openai_document(user_text, lang, doc_type):
-    return await ask_openai_task(build_document_task(user_text, lang, doc_type), lang)
+async def ask_openai_document(user_text, lang, doc_type, jurisdiction):
+    return await ask_openai_task(build_document_task(user_text, lang, doc_type, jurisdiction), lang)
 
 
-async def ask_openai_followup(case_text, question, lang):
-    return await ask_openai_task(build_followup_task(case_text, question, lang), lang)
+async def ask_openai_followup(case_text, question, lang, jurisdiction):
+    return await ask_openai_task(build_followup_task(case_text, question, lang, jurisdiction), lang)
 
 
 def extract_text_from_file(file_name, file_bytes):
     lower = file_name.lower()
-
     try:
         if lower.endswith(".txt"):
             return file_bytes.decode("utf-8", errors="ignore")
-
         if lower.endswith(".pdf"):
             reader = PdfReader(BytesIO(file_bytes))
             text = []
             for page in reader.pages:
                 text.append(page.extract_text() or "")
             return "\n".join(text).strip()
-
         if lower.endswith(".docx"):
             doc = Document(BytesIO(file_bytes))
             return "\n".join(p.text for p in doc.paragraphs).strip()
-
         return ""
     except Exception:
         return ""
 
 
-async def send_language_menu(bot, chat_id=None, lang="lt", edit_query=None):
-    keyboard = [
-        [InlineKeyboardButton("🇱🇹 Lietuvių", callback_data="lang_lt")],
-        [InlineKeyboardButton("🇬🇧 English", callback_data="lang_en")],
-        [InlineKeyboardButton("🇳🇴 Norsk", callback_data="lang_no")],
-    ]
-
-    text = LANG_TEXT.get(lang, LANG_TEXT["lt"])["welcome"]
-
-    if edit_query is not None:
-        await edit_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
-        return
-
-    await bot.send_message(
-        chat_id=chat_id,
-        text=text,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-    )
-
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    detected_lang = detect_language_from_telegram(update.effective_user)
+    lang = detect_language_from_telegram(update.effective_user)
 
     users[user_id] = {
-        "lang": None,
-        "detected_lang": detected_lang,
-        "safety_accepted": False,
+        "lang": lang,
+        "jurisdiction": None,
         "case_text": None,
         "case_id": None,
         "case_number": None,
@@ -723,15 +713,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "awaiting_followup": False,
     }
 
-    db_user_upsert(update.effective_user, detected_lang)
+    db_user_upsert(update.effective_user, lang)
 
-    keyboard = [[InlineKeyboardButton(LANG_TEXT[detected_lang]["accept"], callback_data="accept_safety")]]
-
+    keyboard = [[InlineKeyboardButton(LANG_TEXT[lang]["accept"], callback_data="accept_safety")]]
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=LANG_TEXT[detected_lang]["safety"],
+        text=f"{WELCOME_TEXT[lang]}\n\n{SAFETY_TEXT[lang]}",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
+
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("⚖️ Justice AI. Use /start to begin.")
 
 
 async def accept_safety_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -739,60 +732,43 @@ async def accept_safety_callback(update: Update, context: ContextTypes.DEFAULT_T
     await query.answer()
 
     user = get_user_state(query.from_user.id)
-    detected_lang = user.get("detected_lang") or detect_language_from_telegram(query.from_user)
+    lang = user.get("lang") or detect_language_from_telegram(query.from_user)
+    user["lang"] = lang
 
-    user["safety_accepted"] = True
+    keyboard = [
+        [InlineKeyboardButton("🇱🇹 Lietuva", callback_data="jur_lt")],
+        [InlineKeyboardButton("🇳🇴 Norvegija", callback_data="jur_no")],
+        [InlineKeyboardButton("🇪🇺 ES", callback_data="jur_eu")],
+        [InlineKeyboardButton("🇬🇧 Jungtinė Karalystė", callback_data="jur_uk")],
+    ]
 
-    await send_language_menu(None, lang=detected_lang, edit_query=query)
-
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "⚖️ Justice AI helps with consumer rights, refunds, payment disputes, complaints and legal claims.\n\nUse /start to begin."
+    await query.edit_message_text(
+        LANG_TEXT[lang]["choose_country"],
+        reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
 
-async def language_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def jurisdiction_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     user = get_user_state(query.from_user.id)
+    lang = user.get("lang") or detect_language_from_telegram(query.from_user)
+    jurisdiction = query.data.replace("jur_", "")
 
-    if not user.get("safety_accepted"):
-        detected_lang = user.get("detected_lang") or detect_language_from_telegram(query.from_user)
-        await query.message.reply_text(LANG_TEXT[detected_lang]["safety"])
-        return
-
-    lang = query.data.replace("lang_", "")
     user["lang"] = lang
-
-    db_user_upsert(query.from_user, lang)
+    user["jurisdiction"] = jurisdiction
 
     await query.edit_message_text(LANG_TEXT[lang]["describe"])
 
 
 async def send_plan_menu(message, lang):
     if lang == "lt":
-        labels = {
-            "1m": "⭐ 100 - 1 mėnuo",
-            "3m": "⭐ 250 - 3 mėnesiai",
-            "6m": "⭐ 450 - 6 mėnesiai",
-            "12m": "⭐ 800 - 12 mėnesių",
-        }
+        labels = {"1m": "⭐ 100 - 1 mėnuo", "3m": "⭐ 250 - 3 mėnesiai", "6m": "⭐ 450 - 6 mėnesiai", "12m": "⭐ 800 - 12 mėnesių"}
     elif lang == "no":
-        labels = {
-            "1m": "⭐ 100 - 1 måned",
-            "3m": "⭐ 250 - 3 måneder",
-            "6m": "⭐ 450 - 6 måneder",
-            "12m": "⭐ 800 - 12 måneder",
-        }
+        labels = {"1m": "⭐ 100 - 1 måned", "3m": "⭐ 250 - 3 måneder", "6m": "⭐ 450 - 6 måneder", "12m": "⭐ 800 - 12 måneder"}
     else:
-        labels = {
-            "1m": "⭐ 100 - 1 month",
-            "3m": "⭐ 250 - 3 months",
-            "6m": "⭐ 450 - 6 months",
-            "12m": "⭐ 800 - 12 months",
-        }
+        labels = {"1m": "⭐ 100 - 1 month", "3m": "⭐ 250 - 3 months", "6m": "⭐ 450 - 6 months", "12m": "⭐ 800 - 12 months"}
 
     keyboard = [[InlineKeyboardButton(label, callback_data=f"plan_{key}")] for key, label in labels.items()]
     await message.reply_text(LANG_TEXT[lang]["choose_plan"], reply_markup=InlineKeyboardMarkup(keyboard))
@@ -800,20 +776,11 @@ async def send_plan_menu(message, lang):
 
 async def send_after_full_menu(message, lang):
     if lang == "lt":
-        keyboard = [
-            [InlineKeyboardButton("❓ Užduoti klausimą", callback_data="ask_question")],
-            [InlineKeyboardButton("📄 Generuoti dokumentą", callback_data="show_docs")],
-        ]
+        keyboard = [[InlineKeyboardButton("❓ Užduoti klausimą", callback_data="ask_question")], [InlineKeyboardButton("📄 Generuoti dokumentą", callback_data="show_docs")]]
     elif lang == "no":
-        keyboard = [
-            [InlineKeyboardButton("❓ Still spørsmål", callback_data="ask_question")],
-            [InlineKeyboardButton("📄 Generer dokument", callback_data="show_docs")],
-        ]
+        keyboard = [[InlineKeyboardButton("❓ Still spørsmål", callback_data="ask_question")], [InlineKeyboardButton("📄 Generer dokument", callback_data="show_docs")]]
     else:
-        keyboard = [
-            [InlineKeyboardButton("❓ Ask a question", callback_data="ask_question")],
-            [InlineKeyboardButton("📄 Generate document", callback_data="show_docs")],
-        ]
+        keyboard = [[InlineKeyboardButton("❓ Ask a question", callback_data="ask_question")], [InlineKeyboardButton("📄 Generate document", callback_data="show_docs")]]
 
     await message.reply_text(LANG_TEXT[lang]["after_full"], reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -840,33 +807,32 @@ async def send_document_menu(message, lang):
             [InlineKeyboardButton("⚖️ Consumer authority complaint", callback_data="doc_authority_complaint")],
             [InlineKeyboardButton("🚨 Fraud report", callback_data="doc_fraud_report")],
         ]
-
     await message.reply_text(LANG_TEXT[lang]["choose_doc"], reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+def ensure_jurisdiction(user):
+    if not user.get("jurisdiction"):
+        user["jurisdiction"] = "lt"
+    return user["jurisdiction"]
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     user = get_user_state(user_id)
 
-    if not user.get("safety_accepted"):
+    if not user.get("lang"):
         await start(update, context)
         return
 
-    if not user["lang"]:
-        await send_language_menu(context.bot, chat_id=update.effective_chat.id, lang=user.get("detected_lang", "lt"))
-        return
-
     lang = user["lang"]
+    jurisdiction = ensure_jurisdiction(user)
 
     if user.get("awaiting_followup") and user.get("case_text"):
         user["awaiting_followup"] = False
         await update.message.reply_text(LANG_TEXT[lang]["thinking"])
-
-        answer = await ask_openai_followup(user["case_text"], update.message.text, lang)
-
+        answer = await ask_openai_followup(user["case_text"], update.message.text, lang, jurisdiction)
         for i in range(0, len(answer), 3900):
             await update.message.reply_text(answer[i:i + 3900])
-
         await send_after_full_menu(update.message, lang)
         return
 
@@ -877,26 +843,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user["case_id"] = case_id
     user["case_number"] = case_number
 
-    await update.message.reply_text(LANG_TEXT[lang]["case_created"].format(case_number=case_number))
+    await update.message.reply_text(f"{LANG_TEXT[lang]['case_created']}\n\n🆔 Bylos Nr.: {case_number}")
 
     active, until = db_subscription_active(user_id)
 
     if active:
         user["unlocked"] = True
         await update.message.reply_text(f"{LANG_TEXT[lang]['active_until']} {until.date()}")
-
-        full_text = f"Bylos numeris: {case_number}\n\n{user['case_text']}"
-        answer = await ask_openai(full_text, lang, full=True)
-
+        await update.message.reply_text(LANG_TEXT[lang]["thinking"])
+        full_text = f"Bylos numeris: {case_number}\nTaikoma šalis: {jurisdiction_name(jurisdiction, lang)}\n\n{user['case_text']}"
+        answer = await ask_openai(full_text, lang, jurisdiction, full=True)
         for i in range(0, len(answer), 3900):
             await update.message.reply_text(answer[i:i + 3900])
-
         await send_after_full_menu(update.message, lang)
         return
 
-    answer = await ask_openai(user["case_text"], lang, full=False)
+    await update.message.reply_text(LANG_TEXT[lang]["thinking"])
+    preview_text = f"Bylos numeris: {case_number}\nTaikoma šalis: {jurisdiction_name(jurisdiction, lang)}\n\n{user['case_text']}"
+    answer = await ask_openai(preview_text, lang, jurisdiction, full=False)
     user["last_answer"] = answer
-
     await update.message.reply_text(answer[:3900])
     await update.message.reply_text(LANG_TEXT[lang]["free_done"])
     await send_plan_menu(update.message, lang)
@@ -906,16 +871,12 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     user = get_user_state(user_id)
 
-    if not user.get("safety_accepted"):
+    if not user.get("lang"):
         await start(update, context)
         return
 
-    if not user["lang"]:
-        await send_language_menu(context.bot, chat_id=update.effective_chat.id, lang=user.get("detected_lang", "lt"))
-        return
-
     lang = user["lang"]
-
+    jurisdiction = ensure_jurisdiction(user)
     await update.message.reply_text(LANG_TEXT[lang]["file_received"])
 
     file_name = "uploaded_file"
@@ -939,7 +900,6 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     tg_file = await context.bot.get_file(file_id)
     file_bytes = bytes(await tg_file.download_as_bytearray())
-
     extracted = extract_text_from_file(file_name, file_bytes)
 
     if not user.get("case_id"):
@@ -948,7 +908,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user["case_id"] = case_id
         user["case_number"] = case_number
         user["case_text"] = base_text
-        await update.message.reply_text(LANG_TEXT[lang]["case_created"].format(case_number=case_number))
+        await update.message.reply_text(f"{LANG_TEXT[lang]['case_created']}\n\n🆔 Bylos Nr.: {case_number}")
 
     db_add_case_file(user["case_id"], file_name, file_type, file_id)
 
@@ -959,12 +919,12 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(LANG_TEXT[lang]["file_no_text"])
 
-    active, until = db_subscription_active(user_id)
-
+    active, _ = db_subscription_active(user_id)
     if active:
         user["unlocked"] = True
         await update.message.reply_text(LANG_TEXT[lang]["thinking"])
-        answer = await ask_openai(user["case_text"], lang, full=True)
+        full_text = f"Bylos numeris: {user.get('case_number') or 'Nenurodytas'}\nTaikoma šalis: {jurisdiction_name(jurisdiction, lang)}\n\n{user['case_text']}"
+        answer = await ask_openai(full_text, lang, jurisdiction, full=True)
         for i in range(0, len(answer), 3900):
             await update.message.reply_text(answer[i:i + 3900])
         await send_after_full_menu(update.message, lang)
@@ -976,35 +936,31 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def plan_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
     user = get_user_state(query.from_user.id)
-    lang = user.get("lang") or "en"
+    lang = user.get("lang") or detect_language_from_telegram(query.from_user)
+    jurisdiction = ensure_jurisdiction(user)
 
     plan_key = query.data.replace("plan_", "")
     plan = PLANS.get(plan_key)
-
     if not plan:
         return
 
     if TEST_MODE:
         until = db_set_subscription(query.from_user.id, plan_key, plan["months"], plan["stars"])
         user["unlocked"] = True
-
         await query.message.reply_text(f"{LANG_TEXT[lang]['test']}\n{LANG_TEXT[lang]['active_until']} {until.date()}")
 
         if user.get("case_text"):
             await query.message.reply_text(LANG_TEXT[lang]["thinking"])
-            answer = await ask_openai(user["case_text"], lang, full=True)
-
+            full_text = f"Bylos numeris: {user.get('case_number') or 'Nenurodytas'}\nTaikoma šalis: {jurisdiction_name(jurisdiction, lang)}\n\n{user['case_text']}"
+            answer = await ask_openai(full_text, lang, jurisdiction, full=True)
             for i in range(0, len(answer), 3900):
                 await query.message.reply_text(answer[i:i + 3900])
-
             await send_after_full_menu(query.message, lang)
         return
 
     title = "Justice AI Access"
     description = f"{plan['months']} month access"
-
     await context.bot.send_invoice(
         chat_id=query.message.chat_id,
         title=title,
@@ -1019,14 +975,11 @@ async def plan_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def ask_question_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
     user = get_user_state(query.from_user.id)
-    lang = user.get("lang") or "en"
-
+    lang = user.get("lang") or detect_language_from_telegram(query.from_user)
     if not user.get("case_text"):
         await query.message.reply_text(LANG_TEXT[lang]["no_case"])
         return
-
     user["awaiting_followup"] = True
     await query.message.reply_text(LANG_TEXT[lang]["ask_prompt"])
 
@@ -1034,23 +987,20 @@ async def ask_question_callback(update: Update, context: ContextTypes.DEFAULT_TY
 async def show_docs_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
     user = get_user_state(query.from_user.id)
-    lang = user.get("lang") or "en"
-
+    lang = user.get("lang") or detect_language_from_telegram(query.from_user)
     if not user.get("case_text"):
         await query.message.reply_text(LANG_TEXT[lang]["no_case"])
         return
-
     await send_document_menu(query.message, lang)
 
 
 async def document_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
     user = get_user_state(query.from_user.id)
-    lang = user.get("lang") or "en"
+    lang = user.get("lang") or detect_language_from_telegram(query.from_user)
+    jurisdiction = ensure_jurisdiction(user)
 
     if not user.get("case_text"):
         await query.message.reply_text(LANG_TEXT[lang]["no_case"])
@@ -1063,11 +1013,9 @@ async def document_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     doc_type = query.data.replace("doc_", "")
-
     await query.message.reply_text(LANG_TEXT[lang]["doc_thinking"])
-
-    document = await ask_openai_document(user["case_text"], lang, doc_type)
-
+    full_text = f"Bylos numeris: {user.get('case_number') or 'Nenurodytas'}\nTaikoma šalis: {jurisdiction_name(jurisdiction, lang)}\n\n{user['case_text']}"
+    document = await ask_openai_document(full_text, lang, doc_type, jurisdiction)
     for i in range(0, len(document), 3900):
         await query.message.reply_text(document[i:i + 3900])
 
@@ -1079,28 +1027,24 @@ async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 async def successful_payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     payment = update.message.successful_payment
     payload = payment.invoice_payload
-
     user_id = update.message.from_user.id
     user = get_user_state(user_id)
-    lang = user.get("lang") or "en"
+    lang = user.get("lang") or detect_language_from_telegram(update.message.from_user)
+    jurisdiction = ensure_jurisdiction(user)
 
     if payload.startswith("sub|"):
         _, plan_key, _ = payload.split("|")
         plan = PLANS.get(plan_key)
-
         if plan:
             until = db_set_subscription(user_id, plan_key, plan["months"], plan["stars"])
             user["unlocked"] = True
-
             await update.message.reply_text(f"{LANG_TEXT[lang]['paid']}\n{LANG_TEXT[lang]['active_until']} {until.date()}")
-
             if user.get("case_text"):
                 await update.message.reply_text(LANG_TEXT[lang]["thinking"])
-                answer = await ask_openai(user["case_text"], lang, full=True)
-
+                full_text = f"Bylos numeris: {user.get('case_number') or 'Nenurodytas'}\nTaikoma šalis: {jurisdiction_name(jurisdiction, lang)}\n\n{user['case_text']}"
+                answer = await ask_openai(full_text, lang, jurisdiction, full=True)
                 for i in range(0, len(answer), 3900):
                     await update.message.reply_text(answer[i:i + 3900])
-
                 await send_after_full_menu(update.message, lang)
 
 
@@ -1109,7 +1053,7 @@ application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("help", help_command))
 application.add_handler(CallbackQueryHandler(accept_safety_callback, pattern="^accept_safety$"))
-application.add_handler(CallbackQueryHandler(language_callback, pattern="^lang_"))
+application.add_handler(CallbackQueryHandler(jurisdiction_callback, pattern="^jur_"))
 application.add_handler(CallbackQueryHandler(plan_callback, pattern="^plan_"))
 application.add_handler(CallbackQueryHandler(ask_question_callback, pattern="^ask_question$"))
 application.add_handler(CallbackQueryHandler(show_docs_callback, pattern="^show_docs$"))
