@@ -48,8 +48,8 @@ PLANS = {
 COUNTRIES = {
     "lt": {"lt": "Lietuva", "en": "Lithuania", "no": "Litauen"},
     "no": {"lt": "Norvegija", "en": "Norway", "no": "Norge"},
-    "eu": {"lt": "ES", "en": "EU", "no": "EU"},
     "uk": {"lt": "Jungtinė Karalystė", "en": "United Kingdom", "no": "Storbritannia"},
+    "other": {"lt": "Kita šalis", "en": "Other country", "no": "Annet land"},
 }
 
 SYSTEM_PROMPT = """
@@ -61,6 +61,8 @@ Language:
 
 Jurisdiction:
 - Apply the selected country/jurisdiction.
+- If selected jurisdiction is Norway, do not answer as if only Lithuanian law is available. Use Norwegian consumer law and relevant Norwegian criminal law sections where applicable.
+- If selected jurisdiction is United Kingdom, use UK law. If selected jurisdiction is Lithuania, use Lithuanian law.
 - Always include relevant legal acts with article/section numbers when possible.
 - Never state that a crime definitely occurred.
 - Use cautious wording such as: possibly applicable, may be relevant, may be assessed under.
@@ -164,7 +166,7 @@ TEXT = {
         "accept": "✅ Suprantu ir sutinku",
         "choose_country": "🌍 Pasirinkite šalį:",
         "collect_case": "📋 Surinkime duomenis bylai\n\nTrumpai aprašykite situaciją arba įkelkite dokumentą.\n\nKuo daugiau informacijos pateiksite, tuo tikslesnė bus analizė.",
-        "thinking": "⏳ Ruošiu atsakymą...",
+        "thinking": "⚖️ Analizuoju pateiktą informaciją...",
         "case_created": "📁 Byla sukurta\n\n🆔 Bylos Nr.: {case_number}",
         "initial": "🔎 Tai pirminis bylos vertinimas.\n\nNorint gauti išsamų vertinimą, veiksmų planą ir dokumentų projektus, pasirinkite prieigos laikotarpį.",
         "choose_plan": "🔓 Pasirinkite prieigos laikotarpį:",
@@ -178,15 +180,15 @@ TEXT = {
         "choose_doc": "📄 Pasirinkite, kokį dokumentą norite sugeneruoti:",
         "no_case": "Pirmiausia aprašykite situaciją arba įkelkite dokumentą.",
         "doc_thinking": "⏳ Ruošiu dokumentą...",
-        "file_received": "📎 Failas gautas. Bandau nuskaityti turinį ir pridėti prie bylos...",
-        "file_saved": "✅ Failas pridėtas prie bylos.",
+        "file_received": "📎 Failas gautas. Apdoroju dokumentą...",
+        "file_saved": "📎 Dokumentas pridėtas prie bylos.",
         "file_no_text": "⚠️ Failą išsaugojau, bet teksto nuskaityti nepavyko. Trumpai aprašykite, kas jame svarbu.",
     },
     "en": {
         "accept": "✅ I understand and agree",
         "choose_country": "🌍 Select country:",
         "collect_case": "📋 Let us collect case details\n\nBriefly describe the situation or upload a document.\n\nThe more information you provide, the more accurate the assessment will be.",
-        "thinking": "⏳ Preparing response...",
+        "thinking": "⚖️ Analyzing the submitted information...",
         "case_created": "📁 Case created\n\n🆔 Case No.: {case_number}",
         "initial": "🔎 This is an initial case assessment.\n\nTo receive a full review, action plan and document drafts, choose an access period.",
         "choose_plan": "🔓 Choose access period:",
@@ -200,15 +202,15 @@ TEXT = {
         "choose_doc": "📄 Choose which document you want to generate:",
         "no_case": "Please describe the situation or upload a document first.",
         "doc_thinking": "⏳ Preparing document...",
-        "file_received": "📎 File received. I will try to read it and add it to the case...",
-        "file_saved": "✅ File added to the case.",
+        "file_received": "📎 File received. Processing the document...",
+        "file_saved": "📎 Document added to the case.",
         "file_no_text": "⚠️ I saved the file, but could not extract text. Briefly describe what is important in it.",
     },
     "no": {
         "accept": "✅ Jeg forstår og godtar",
         "choose_country": "🌍 Velg land:",
         "collect_case": "📋 La oss samle saksinformasjon\n\nBeskriv situasjonen kort eller last opp et dokument.\n\nJo mer informasjon du gir, desto mer presis blir vurderingen.",
-        "thinking": "⏳ Forbereder svar...",
+        "thinking": "⚖️ Analyserer innsendt informasjon...",
         "case_created": "📁 Sak opprettet\n\n🆔 Saksnr.: {case_number}",
         "initial": "🔎 Dette er en første vurdering av saken.\n\nFor full vurdering, handlingsplan og dokumentutkast, velg tilgangsperiode.",
         "choose_plan": "🔓 Velg tilgangsperiode:",
@@ -222,8 +224,8 @@ TEXT = {
         "choose_doc": "📄 Velg hvilket dokument du vil generere:",
         "no_case": "Beskriv situasjonen eller last opp et dokument først.",
         "doc_thinking": "⏳ Forbereder dokument...",
-        "file_received": "📎 Fil mottatt. Jeg prøver å lese innholdet og legge det til saken...",
-        "file_saved": "✅ Fil lagt til saken.",
+        "file_received": "📎 Fil mottatt. Behandler dokumentet...",
+        "file_saved": "📎 Dokumentet er lagt til saken.",
         "file_no_text": "⚠️ Filen er lagret, men tekst kunne ikke leses. Beskriv kort hva som er viktig i den.",
     },
 }
@@ -315,8 +317,8 @@ def country_menu():
     return {"inline_keyboard": [
         [{"text": "🇱🇹 Lietuva", "callback_data": "country_lt"}],
         [{"text": "🇳🇴 Norvegija", "callback_data": "country_no"}],
-        [{"text": "🇪🇺 ES", "callback_data": "country_eu"}],
         [{"text": "🇬🇧 Jungtinė Karalystė", "callback_data": "country_uk"}],
+        [{"text": "🌐 Kita šalis", "callback_data": "country_other"}],
     ]}
 
 
@@ -334,29 +336,70 @@ def after_full_menu(lang: str):
     ]}
 
 
-def doc_menu(lang: str):
-    if lang == "lt":
-        rows = [
-            ["📄 Pretenzija pardavėjui", "doc_seller_claim"],
-            ["💳 Prašymas bankui dėl pinigų grąžinimo", "doc_bank_refund"],
-            ["⚖️ Skundas institucijai", "doc_authority_complaint"],
-            ["🚨 Pareiškimas dėl galimo sukčiavimo", "doc_fraud_report"],
-        ]
-    elif lang == "no":
-        rows = [
-            ["📄 Klagebrev til selger", "doc_seller_claim"],
-            ["💳 Forespørsel til bank", "doc_bank_refund"],
-            ["⚖️ Klage til myndighet", "doc_authority_complaint"],
-            ["🚨 Svindelrapport", "doc_fraud_report"],
-        ]
-    else:
-        rows = [
-            ["📄 Seller complaint letter", "doc_seller_claim"],
-            ["💳 Bank refund request", "doc_bank_refund"],
-            ["⚖️ Consumer authority complaint", "doc_authority_complaint"],
-            ["🚨 Fraud report", "doc_fraud_report"],
-        ]
-    return {"inline_keyboard": [[{"text": t, "callback_data": c}] for t, c in rows]}
+def detect_case_type(case_text: str) -> str:
+    text = (case_text or "").lower()
+    fraud_keywords = [
+        "sukči", "apgav", "scam", "fraud", "deep", "coin", "crypto", "kript", "binance",
+        "invest", "whatsapp", "telegram", "anydesk", "platform", "netikra", "praradau pinigus"
+    ]
+    bank_keywords = ["bank", "kortel", "visa", "mastercard", "mokėj", "paved", "chargeback", "lėšų grąž"]
+    seller_keywords = ["prek", "pardav", "užsak", "siunt", "nepristat", "negav", "brok", "garant", "defekt", "grąžinti"]
+    service_keywords = ["sutart", "paslaug", "prenumer", "operator", "internetas", "ryšys"]
+
+    if any(k in text for k in fraud_keywords):
+        return "fraud"
+    if any(k in text for k in bank_keywords):
+        return "bank"
+    if any(k in text for k in seller_keywords):
+        return "seller"
+    if any(k in text for k in service_keywords):
+        return "service"
+    return "general"
+
+
+def doc_label(doc_type: str, lang: str, country: str | None = None) -> str:
+    country = country or "lt"
+    labels = {
+        "lt": {
+            "seller_claim": "📄 Pretenzija pardavėjui",
+            "bank_refund": "💳 Prašymas bankui dėl pinigų grąžinimo",
+            "authority_complaint": "⚖️ Skundas institucijai",
+            "fraud_report": "🚨 Pareiškimas dėl galimo sukčiavimo",
+        },
+        "no": {
+            "seller_claim": "📄 Klagebrev til selger",
+            "bank_refund": "💳 Forespørsel til bank",
+            "authority_complaint": "⚖️ Klage til myndighet",
+            "fraud_report": "🚨 Svindelrapport",
+        },
+        "en": {
+            "seller_claim": "📄 Seller complaint letter",
+            "bank_refund": "💳 Bank refund request",
+            "authority_complaint": "⚖️ Authority complaint",
+            "fraud_report": "🚨 Fraud report",
+        },
+    }
+    return labels.get(lang, labels["en"]).get(doc_type, doc_type)
+
+
+def relevant_doc_types(case_text: str, country: str | None = None) -> list[str]:
+    case_type = detect_case_type(case_text)
+    if case_type == "fraud":
+        return ["fraud_report", "bank_refund"]
+    if case_type == "bank":
+        return ["bank_refund", "authority_complaint"]
+    if case_type == "seller":
+        return ["seller_claim", "bank_refund", "authority_complaint"]
+    if case_type == "service":
+        return ["seller_claim", "authority_complaint"]
+    return ["authority_complaint", "seller_claim"]
+
+
+def doc_menu(lang: str, case_text: str = "", country: str | None = None):
+    rows = []
+    for doc_type in relevant_doc_types(case_text, country):
+        rows.append([{"text": doc_label(doc_type, lang, country), "callback_data": f"doc_{doc_type}"}])
+    return {"inline_keyboard": rows}
 
 
 def db_user_get(telegram_id: int):
@@ -546,43 +589,93 @@ def document_name(doc_type: str, lang: str) -> str:
     return names.get(lang, names["en"]).get(doc_type, "document")
 
 
+def jurisdiction_recipient_hint(country: str, doc_type: str, lang: str) -> str:
+    if country == "no":
+        if doc_type == "fraud_report":
+            return "Norvegijos policija / Politiet. Jei dokumentas skirtas vartotojų ginčui, naudok Forbrukertilsynet."
+        if doc_type == "authority_complaint":
+            return "Forbrukertilsynet (Norwegian Consumer Authority) arba Forbrukerrådet, pagal situaciją."
+        if doc_type == "bank_refund":
+            return "Kliento bankas Norvegijoje arba mokėjimo kortelės išdavėjas."
+        return "Pardavėjas arba paslaugos teikėjas Norvegijoje."
+    if country == "uk":
+        if doc_type == "fraud_report":
+            return "Action Fraud / UK Police, jei yra sukčiavimo požymių."
+        if doc_type == "authority_complaint":
+            return "Trading Standards arba Citizens Advice Consumer Service, pagal situaciją."
+        if doc_type == "bank_refund":
+            return "Kliento bankas / kortelės išdavėjas Jungtinėje Karalystėje."
+        return "Pardavėjas arba paslaugos teikėjas Jungtinėje Karalystėje."
+    if country == "other":
+        return "Parink instituciją pagal byloje nurodytą šalį. Jei šalies nėra, dokumente nenaudok konkrečios institucijos pavadinimo."
+    # Lithuania default
+    if doc_type == "fraud_report":
+        return "Policija / ePolicija, jei yra galimo sukčiavimo požymių."
+    if doc_type == "authority_complaint":
+        return "Valstybinė vartotojų teisių apsaugos tarnyba, jei tai vartotojų ginčas; Lietuvos bankas, jei tai finansinių paslaugų ginčas."
+    if doc_type == "bank_refund":
+        return "Kliento bankas arba mokėjimo kortelės išdavėjas."
+    return "Pardavėjas arba paslaugos teikėjas."
+
+
 def build_doc_prompt(case_text: str, lang: str, country: str, doc_type: str):
     country_name = COUNTRIES.get(country, COUNTRIES["lt"])[lang]
     doc = document_name(doc_type, lang)
+    recipient_hint = jurisdiction_recipient_hint(country, doc_type, lang)
+    case_type = detect_case_type(case_text)
+
     if lang == "lt":
         return f"""
 Atsakyk tik lietuviškai. Taikoma šalis / jurisdikcija: {country_name}.
 
 Paruošk dokumentą: {doc}.
+Bylos tipas pagal turinį: {case_type}.
+Adresato parinkimo gairė: {recipient_hint}
 
-Reikalavimai:
-- Oficialus, gramatiškai taisyklingas tekstas.
-- Dokumentą pradėk nuo gavėjo pavadinimo ir dokumento antraštės.
+Svarbiausios taisyklės:
+- Dokumentą generuok iš realios bylos informacijos ir iš įkeltų failų nuskaityto teksto.
+- Jei PDF / bylos tekste yra vardas, pavardė, adresas, el. paštas, telefonas, data, suma, platforma, įmonė, bankas, pavedimų duomenys ar kiti faktai, įrašyk juos į dokumentą automatiškai.
+- Nenaudok tuščių laukų [Vardas Pavardė], [Adresas], [El. paštas], [Telefonas], [Data], jei duomenys jau randami byloje.
+- Jei konkretaus duomens nėra, jo eilutę praleisk. Neįterpk instrukcinių tekstų laužtiniuose skliaustuose.
+- Nenaudok frazių: [Čia pateikite...], [Jei yra priedų...], [Paraiška pridedama].
+- Dokumentas turi būti pilnai užpildytas ir paruoštas siuntimui.
+- Dokumentą pradėk nuo tinkamo gavėjo pagal pasirinktą šalį ir dokumento antraštės.
+- Jei pasirinkta Norvegija, nenaudok Lietuvos institucijų, nebent byloje aiškiai nurodyta, kad ginčas nagrinėjamas Lietuvoje.
+- Jei pasirinkta Jungtinė Karalystė, nenaudok Lietuvos institucijų.
 - Nenaudok kreipinių: Gerbiamasis, Gerbiamoji, Gerb. pone, Gerb. ponia.
-- Nenaudok frazės [Paraiška pridedama].
-- Jei yra priedų, naudok skyrių „Priedai:“; jei priedų nėra, šio skyriaus nerodyk.
-- Naudok laukus: [Vardas Pavardė], [Adresas], [El. paštas], [Telefonas], [Data].
-- Įtrauk galimai taikytinus teisės aktus su straipsnių numeriais.
+- Dokumento viršuje gali įrašyti: „Sukūrė Justice AI“. Bylos numerio dokumente nerašyk, nebent jis būtinas vidinei nuorodai.
+- Įtrauk galimai taikytinus teisės aktus su straipsnių / paragrafų numeriais, bet neteik kategoriško teiginio, kad nusikaltimas įvykdytas.
+- Jei yra aiškūs priedai pagal bylą, naudok skyrių „Priedai:“ ir išvardink tik realiai byloje minimus priedus. Jei priedų neįmanoma nustatyti, šio skyriaus nerodyk.
 - Nesiūlyk kreiptis į konsultantus ar teisininkus.
 
-Bylos informacija:
+Bylos informacija ir nuskaitytas dokumentų tekstas:
 {case_text}
 """
+
     return f"""
 Reply only in {lang_name(lang)}. Jurisdiction: {country_name}.
 
 Prepare this document: {doc}.
+Case type from content: {case_type}.
+Recipient guidance: {recipient_hint}
 
-Requirements:
-- Formal and grammatically correct.
-- Start with recipient name and document title.
+Rules:
+- Generate the document from the real case information and extracted file text.
+- If the case/PDF contains name, address, email, phone, dates, amounts, platform names, company names, bank/payment data or other facts, insert them directly.
+- Do not use empty placeholders if data exists.
+- If a data point is missing, omit that line instead of adding instructional bracket text.
+- Do not use instructional phrases like [insert details here].
+- The document must be complete and ready to send.
+- Start with the correct recipient for the selected jurisdiction and the document title.
+- If Norway is selected, do not use Lithuanian institutions unless the case explicitly concerns Lithuania.
+- If the UK is selected, do not use Lithuanian institutions.
 - Do not use Dear Sir/Madam or gendered salutations.
-- Do not use attachment phrases unless an actual attachment list is included.
-- Add relevant law names and article/section numbers.
-- Use placeholders for missing data.
+- You may write "Prepared via Justice AI" at the top. Do not include the case number unless it is necessary as an internal reference.
+- Include relevant laws and section/article numbers, but do not state that a crime definitely occurred.
+- If real attachments are identifiable from the case, include an Attachments section. Otherwise omit it.
 - Do not suggest external lawyers or advisors.
 
-Case information:
+Case information and extracted document text:
 {case_text}
 """
 
@@ -617,8 +710,8 @@ def show_start(chat_id: int, tg_user: dict):
     state = get_state(chat_id)
     state.update({"lang": lang, "accepted": False, "country": None, "case_text": None, "case_id": None, "case_number": None, "awaiting_followup": False})
     db_user_upsert(tg_user, lang)
-    send_message(chat_id, welcome_text(lang))
-    send_message(chat_id, SAFETY_TEXT[lang], reply_markup=safety_menu(lang))
+    start_text = f"{welcome_text(lang)}\n\n{SAFETY_TEXT[lang]}"
+    send_message(chat_id, start_text, reply_markup=safety_menu(lang))
 
 
 def show_country(chat_id: int):
@@ -645,11 +738,17 @@ def create_case_from_text(chat_id: int, user_text: str):
         send_message(chat_id, TEXT[lang]["thinking"])
         full_text = f"Bylos numeris: {case_number}\n\n{user_text}"
         answer = openai_request(build_case_prompt(full_text, lang, country, full=True), lang)
+        if not answer:
+            send_message(chat_id, "⚠️ Analizės šiuo metu nepavyko atlikti. Bandykite dar kartą po kelių minučių." if lang == "lt" else "⚠️ The analysis could not be completed right now. Please try again in a few minutes.")
+            return
         send_chunks(chat_id, answer, reply_markup=after_full_menu(lang))
         return
 
     send_message(chat_id, TEXT[lang]["thinking"])
     answer = openai_request(build_case_prompt(user_text, lang, country, full=False), lang)
+    if not answer:
+        send_message(chat_id, "⚠️ Analizės šiuo metu nepavyko atlikti. Bandykite dar kartą po kelių minučių." if lang == "lt" else "⚠️ The analysis could not be completed right now. Please try again in a few minutes.")
+        return
     send_chunks(chat_id, answer)
     send_message(chat_id, TEXT[lang]["initial"])
     send_message(chat_id, TEXT[lang]["choose_plan"], reply_markup=plan_menu(lang))
@@ -659,7 +758,6 @@ def handle_file(chat_id: int, msg: dict):
     state = get_state(chat_id)
     lang = state["lang"]
     country = state.get("country") or "lt"
-    send_message(chat_id, TEXT[lang]["file_received"])
 
     file_id = None
     file_name = "uploaded_file"
@@ -688,26 +786,60 @@ def handle_file(chat_id: int, msg: dict):
 
     extracted = extract_text_from_file(file_name, file_bytes)
 
+    created_now = False
     if not state.get("case_id"):
         base = f"Įkelta byla iš failo: {file_name}" if lang == "lt" else f"Case created from file: {file_name}"
         case_id, case_number = db_create_case(chat_id, base)
         state.update({"case_id": case_id, "case_number": case_number, "case_text": base})
-        send_message(chat_id, TEXT[lang]["case_created"].format(case_number=case_number))
+        created_now = True
 
     db_add_case_file(state["case_id"], file_name, file_type, file_id)
 
     if extracted:
         state["case_text"] = (state.get("case_text") or "") + f"\n\n--- FILE: {file_name} ---\n{extracted[:6000]}"
         db_update_case(state["case_id"], state["case_text"])
-        send_message(chat_id, TEXT[lang]["file_saved"])
+        if lang == "lt":
+            status_text = (
+                f"📁 Byla sukurta\n\n"
+                f"🆔 Bylos Nr.: {state.get('case_number')}\n\n"
+                f"📎 Dokumentas pridėtas prie bylos.\n\n"
+                f"⚖️ Analizuoju pateiktą informaciją..."
+            ) if created_now else (
+                f"📎 Dokumentas pridėtas prie bylos.\n\n"
+                f"⚖️ Analizuoju pateiktą informaciją..."
+            )
+        elif lang == "no":
+            status_text = (
+                f"📁 Sak opprettet\n\n"
+                f"🆔 Saksnr.: {state.get('case_number')}\n\n"
+                f"📎 Dokumentet er lagt til saken.\n\n"
+                f"⚖️ Analyserer innsendt informasjon..."
+            ) if created_now else (
+                f"📎 Dokumentet er lagt til saken.\n\n"
+                f"⚖️ Analyserer innsendt informasjon..."
+            )
+        else:
+            status_text = (
+                f"📁 Case created\n\n"
+                f"🆔 Case No.: {state.get('case_number')}\n\n"
+                f"📎 Document added to the case.\n\n"
+                f"⚖️ Analyzing the submitted information..."
+            ) if created_now else (
+                f"📎 Document added to the case.\n\n"
+                f"⚖️ Analyzing the submitted information..."
+            )
+        send_message(chat_id, status_text)
     else:
         send_message(chat_id, TEXT[lang]["file_no_text"])
 
     active, _ = db_subscription_active(chat_id)
     if active:
-        send_message(chat_id, TEXT[lang]["thinking"])
         full_text = f"Bylos numeris: {state.get('case_number')}\n\n{state.get('case_text')}"
         answer = openai_request(build_case_prompt(full_text, lang, country, full=True), lang)
+        if not answer:
+            err = "⚠️ Analizės šiuo metu nepavyko atlikti. Bandykite dar kartą po kelių minučių." if lang == "lt" else "⚠️ The analysis could not be completed right now. Please try again in a few minutes."
+            send_message(chat_id, err)
+            return
         send_chunks(chat_id, answer, reply_markup=after_full_menu(lang))
     else:
         send_message(chat_id, TEXT[lang]["initial"])
@@ -784,7 +916,7 @@ def telegram_webhook():
                 if not state.get("case_text"):
                     send_message(chat_id, TEXT[lang]["no_case"])
                 else:
-                    send_message(chat_id, TEXT[lang]["choose_doc"], reply_markup=doc_menu(lang))
+                    send_message(chat_id, TEXT[lang]["choose_doc"], reply_markup=doc_menu(lang, state.get("case_text") or "", state.get("country")))
 
             elif data.startswith("doc_"):
                 if not state.get("case_text"):
