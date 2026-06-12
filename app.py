@@ -288,6 +288,7 @@ def get_state(chat_id: int) -> dict:
             "awaiting_doc_details": False,
             "pending_doc_type": None,
             "files": [],
+"upload_menu_sent": False,
         }
     return USER_STATES[chat_id]
 
@@ -931,10 +932,19 @@ Question:
 def show_start(chat_id: int, tg_user: dict):
     lang = detect_lang(tg_user)
     state = get_state(chat_id)
-    state.update({"lang": lang, "accepted": False, "country": None, "case_text": None, "case_id": None, "case_number": None, "awaiting_followup": False, "awaiting_doc_details": False, "pending_doc_type": None, "files": []})
-    db_user_upsert(tg_user, lang)
-    start_text = f"{welcome_text(lang)}\n\n{SAFETY_TEXT[lang]}"
-    send_message(chat_id, start_text, reply_markup=safety_menu(lang))
+    state.update({
+    "lang": lang,
+    "accepted": False,
+    "country": None,
+    "case_text": None,
+    "case_id": None,
+    "case_number": None,
+    "awaiting_followup": False,
+    "awaiting_doc_details": False,
+    "pending_doc_type": None,
+    "files": [],
+    "upload_menu_sent": False,
+})
 
 
 def show_country(chat_id: int):
@@ -1071,7 +1081,13 @@ def handle_file(chat_id: int, msg: dict):
         else:
             status_text += "\n\n✅ You can upload more documents or start the combined case analysis."
 
-    send_message(chat_id, status_text, reply_markup=file_action_menu(lang))
+    if not state.get("upload_menu_sent"):     send_message(chat_id, status_text, reply_markup=file_action_menu(lang))     state["upload_menu_sent"] = True else:     if lang == "lt":         short_text = "📎 Dokumentas pridėtas prie bylos."         if not extracted:             short_text += "
+
+⚠️ Teksto nuskaityti nepavyko. Trumpai aprašykite svarbiausią informaciją viena žinute."     elif lang == "no":         short_text = "📎 Dokumentet er lagt til saken."         if not extracted:             short_text += "
+
+⚠️ Tekst kunne ikke leses. Beskriv det viktigste i én melding."     else:         short_text = "📎 Document added to the case."         if not extracted:             short_text += "
+
+⚠️ Text could not be extracted. Briefly describe the most important information in one message."      send_message(chat_id, short_text)
 
 
 @app.route("/", methods=["GET"])
