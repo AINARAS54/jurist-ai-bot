@@ -1,5 +1,6 @@
 import os
 import re
+import base64
 import logging
 from io import BytesIO
 from datetime import datetime, timezone, timedelta
@@ -384,6 +385,15 @@ def detect_case_type(case_text: str) -> str:
     return "general"
 
 
+
+def is_police_case(case_text: str) -> bool:
+    text = (case_text or "").lower()
+    return any(k in text for k in [
+        "policija", "politiet", "politi", "prokurat", "henleggelse", "henlagt",
+        "nutrauk", "nutraukt", "nutraukimo", "skund", "klage", "pareiškim",
+        "etterforskning", "tyrimas", "tyrimo", "manglende svar", "neatsak"
+    ])
+
 def doc_label(doc_type: str, lang: str, country: str | None = None) -> str:
     country = country or "lt"
     labels = {
@@ -425,12 +435,11 @@ def relevant_doc_types(case_text: str, country: str | None = None) -> list[str]:
         "chargeback", "lėšų", "lesu", "binance", "spectrocoin", "usdc", "crypto", "kript"
     ])
 
-    if case_type == "fraud" or police_context:
-        docs = []
-        if police_context:
-            docs.append("appeal_police_decision")
-        else:
-            docs.append("fraud_report")
+    if police_context:
+        return ["appeal_police_decision"]
+
+    if case_type == "fraud":
+        docs = ["fraud_report"]
         if bank_context:
             docs.append("bank_refund")
         return docs
@@ -507,14 +516,112 @@ def db_add_case_file(case_id: int, file_name: str, file_type: str, telegram_file
         supabase.table("case_files").insert({"case_id": case_id, "file_name": file_name, "file_type": file_type, "telegram_file_id": telegram_file_id}).execute()
 
 
+
+def ocr_pdf_with_openai(file_bytes: bytes, max_pages: int = 3) -> str:
+    """
+    OCR fallback for image-based PDFs (for example Gmail print/export PDFs).
+    Uses PyMuPDF to render pages as images and OpenAI Vision to extract visible text.
+    """
+    if not file_bytes:
+        return ""
+
+    try:
+        import fitz  # PyMuPDF
+    except Exception as e:
+        logger.warning("PyMuPDF is not installed or cannot be imported: %s", e)
+        return ""
+
+    try:
+        pdf = fitz.open(stream=file_bytes, filetype="pdf")
+        if len(pdf) == 0:
+            return ""
+
+        image_contents = []
+        for page_index in range(min(len(pdf), max_pages)):
+            page = pdf.load_page(page_index)
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+            png_bytes = pix.tobytes("png")
+            b64 = base64.b64encode(png_bytes).decode("utf-8")
+            image_contents.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{b64}"}
+            })
+
+        if not image_contents:
+            return ""
+
+        logger.info("PDF OCR START: pages=%s", len(image_contents))
+
+        payload = {
+            "model": OPENAI_MODEL,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an OCR engine. Extract all visible text from the provided PDF page images. "
+                        "Preserve names, dates, case numbers, email addresses, amounts, links and addresses. "
+                        "Return only extracted text. Do not summarize."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Extract all visible text from these PDF page images."},
+                        *image_contents,
+                    ],
+                },
+            ],
+            "temperature": 0,
+        }
+
+        r = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=90,
+        )
+
+        if not r.ok:
+            logger.error("OpenAI OCR error: %s %s", r.status_code, r.text[:500])
+            return ""
+
+        text = r.json()["choices"][0]["message"]["content"].strip()
+        logger.info("PDF OCR DONE: chars=%s", len(text))
+        return text
+
+    except Exception as e:
+        logger.warning("PDF OCR failed: %s", e)
+        return ""
+
+
 def extract_text_from_file(file_name: str, file_bytes: bytes) -> str:
     lower = (file_name or "").lower()
     try:
         if lower.endswith(".txt"):
             return file_bytes.decode("utf-8", errors="ignore")
+
         if lower.endswith(".pdf"):
-            reader = PdfReader(BytesIO(file_bytes))
-            return "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+            text_parts = []
+
+            # 1) pypdf text layer
+            try:
+                reader = PdfReader(BytesIO(file_bytes))
+                text_parts.append("\n".join((page.extract_text() or "") for page in reader.pages).strip())
+            except Exception as e:
+                logger.warning("pypdf extraction failed: %s", e)
+
+            text = "\n\n".join(part for part in text_parts if part).strip()
+            logger.info("PDF text layer chars=%s for %s", len(text), file_name)
+
+            # 2) OCR fallback for image/scanned PDFs
+            if len(text) < 50:
+                ocr_text = ocr_pdf_with_openai(file_bytes)
+                if ocr_text and len(ocr_text.strip()) > len(text):
+                    text = ocr_text.strip()
+
+            logger.info("PDF final extracted chars=%s for %s", len(text), file_name)
+            return text
+
         if lower.endswith(".docx"):
             doc = Document(BytesIO(file_bytes))
             return "\n".join(p.text for p in doc.paragraphs).strip()
@@ -554,7 +661,7 @@ Paruošk trumpą pilną bylos vertinimą Telegram formatui.
 
 Naudok tik šiuos skyrius:
 
-🆔 Bylos numeris
+⚖️ Bylos analizė
 📋 Situacija
 ⚖️ Galimai taikytini teisės aktai
 🎯 Rekomenduojami veiksmai
@@ -566,7 +673,7 @@ Taisyklės:
 - Nerodyk skyrių „Reikalingi įrodymai“, „Bylos stiprumas“, „Klausimai bylai patikslinti“ ir „Praktiniai pasiūlymai“, nebent vartotojas to aiškiai prašo.
 - Pinigų grąžinimo per banką skyrių rodyk tik jei byla tiesiogiai susijusi su kortelės ar bankiniu mokėjimu.
 - Jei byla apie policijos sprendimą, tyrimo nutraukimą, neatsakytą skundą ar bylos eigą, rekomenduok veiksmus policijos / prokuratūros procese, o ne vartotojų instituciją.
-- Nurodyk įstatymų, direktyvų arba kodeksų pavadinimus ir straipsnių / paragrafų numerius, jei jie gali būti aktualūs.
+- Nurodyk konkrečius straipsnius / paragrafus tik jei esi pakankamai tikras. Jei nesi tikras dėl numerio, nurodyk tik įstatymo pavadinimą be išgalvoto straipsnio.
 - Neteik kategoriško teiginio, kad nusikaltimas įvykdytas. Naudok: „galimai taikytina“, „gali būti aktualu“, „gali būti vertinama pagal“.
 
 Bylos informacija:
@@ -1082,39 +1189,36 @@ def handle_file(chat_id: int, msg: dict):
         if created_now:
             status_text = (
                 f"📁 Byla sukurta\n\n"
-                f"🆔 Bylos Nr.: {state.get('case_number')}\n\n"
                 f"📎 Dokumentas pridėtas prie bylos."
             )
         else:
             status_text = "📎 Dokumentas pridėtas prie bylos."
         if not extracted:
-            status_text += "\n\n⚠️ Dokumentas pridėtas, bet teksto nuskaityti nepavyko. Trumpai aprašykite svarbiausią informaciją viena žinute."
+            status_text += "\n\n✅ Dokumentas išsaugotas. Galite trumpai aprašyti svarbią informaciją arba pradėti bendrą bylos analizę."
         else:
             status_text += "\n\n✅ Galite pradėti bendrą bylos analizę."
     elif lang == "no":
         if created_now:
             status_text = (
                 f"📁 Sak opprettet\n\n"
-                f"🆔 Saksnr.: {state.get('case_number')}\n\n"
                 f"📎 Dokumentet er lagt til saken."
             )
         else:
             status_text = "📎 Dokumentet er lagt til saken."
         if not extracted:
-            status_text += "\n\n⚠️ Tekst kunne ikke leses. Hvis dokumentet inneholder viktig informasjon, beskriv det kort i én melding."
+            status_text += "\n\n✅ Dokumentet er lagret. Du kan kort beskrive viktig informasjon eller starte samlet analyse."
         else:
             status_text += "\n\n✅ Du kan starte samlet analyse."
     else:
         if created_now:
             status_text = (
                 f"📁 Case created\n\n"
-                f"🆔 Case No.: {state.get('case_number')}\n\n"
                 f"📎 Document added to the case."
             )
         else:
             status_text = "📎 Document added to the case."
         if not extracted:
-            status_text += "\n\n⚠️ Text could not be extracted. If the document contains important information, briefly describe it in one message."
+            status_text += "\n\n✅ Document saved. You can briefly describe important information or start the combined case analysis."
         else:
             status_text += "\n\n✅ You can start the combined case analysis."
 
@@ -1127,15 +1231,8 @@ def handle_file(chat_id: int, msg: dict):
         send_message(chat_id, status_text, reply_markup=file_action_menu(lang))
         state["upload_menu_sent"] = True
     else:
-        # Subsequent single-file uploads are added silently unless text extraction failed.
-        if not extracted:
-            if lang == "lt":
-                short_text = "⚠️ Dokumentas pridėtas, bet teksto nuskaityti nepavyko. Trumpai aprašykite svarbiausią informaciją viena žinute."
-            elif lang == "no":
-                short_text = "⚠️ Dokumentet er lagt til saken, men teksten kunne ikke leses. Beskriv det viktigste i én melding."
-            else:
-                short_text = "⚠️ Document added, but text could not be extracted. Briefly describe the most important information in one message."
-            send_message(chat_id, short_text)
+        # Keep later uploads quiet unless the user checks document list or starts analysis.
+        return
 
 
 @app.route("/", methods=["GET"])
@@ -1255,6 +1352,13 @@ def telegram_webhook():
                 else:
                     doc_type = data.replace("doc_", "")
                     full_text = state.get('case_text') or ""
+
+                    # Police / investigation-closure cases usually already contain enough context
+                    # in the uploaded police letters and complaint. Do not ask redundant questions.
+                    if doc_type == "appeal_police_decision" and is_police_case(full_text):
+                        generate_document_for_state(chat_id, state, lang, doc_type)
+                        return jsonify({"ok": True})
+
                     check = openai_request(build_doc_missing_prompt(full_text, lang, state.get("country") or "lt", doc_type), lang)
                     missing = parse_missing_doc_questions(check)
                     if missing:
