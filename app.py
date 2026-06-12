@@ -287,6 +287,7 @@ def get_state(chat_id: int) -> dict:
             "awaiting_followup": False,
             "awaiting_doc_details": False,
             "pending_doc_type": None,
+            "files": [],
         }
     return USER_STATES[chat_id]
 
@@ -337,6 +338,26 @@ def after_full_menu(lang: str):
     return {"inline_keyboard": [
         [{"text": TEXT[lang]["ask_question"], "callback_data": "ask_question"}],
         [{"text": TEXT[lang]["generate_doc"], "callback_data": "show_docs"}],
+    ]}
+
+
+def file_action_menu(lang: str):
+    if lang == "lt":
+        return {"inline_keyboard": [
+            [{"text": "📎 Įkelti dar dokumentų", "callback_data": "upload_more"}],
+            [{"text": "📂 Bylos dokumentai", "callback_data": "case_docs"}],
+            [{"text": "✅ Analizuoti bylą", "callback_data": "analyze_case"}],
+        ]}
+    if lang == "no":
+        return {"inline_keyboard": [
+            [{"text": "📎 Last opp flere dokumenter", "callback_data": "upload_more"}],
+            [{"text": "📂 Saksdokumenter", "callback_data": "case_docs"}],
+            [{"text": "✅ Analyser saken", "callback_data": "analyze_case"}],
+        ]}
+    return {"inline_keyboard": [
+        [{"text": "📎 Upload more documents", "callback_data": "upload_more"}],
+        [{"text": "📂 Case documents", "callback_data": "case_docs"}],
+        [{"text": "✅ Analyze case", "callback_data": "analyze_case"}],
     ]}
 
 
@@ -875,7 +896,7 @@ Question:
 def show_start(chat_id: int, tg_user: dict):
     lang = detect_lang(tg_user)
     state = get_state(chat_id)
-    state.update({"lang": lang, "accepted": False, "country": None, "case_text": None, "case_id": None, "case_number": None, "awaiting_followup": False, "awaiting_doc_details": False, "pending_doc_type": None})
+    state.update({"lang": lang, "accepted": False, "country": None, "case_text": None, "case_id": None, "case_number": None, "awaiting_followup": False, "awaiting_doc_details": False, "pending_doc_type": None, "files": []})
     db_user_upsert(tg_user, lang)
     start_text = f"{welcome_text(lang)}\n\n{SAFETY_TEXT[lang]}"
     send_message(chat_id, start_text, reply_markup=safety_menu(lang))
@@ -896,7 +917,7 @@ def create_case_from_text(chat_id: int, user_text: str):
     lang = state["lang"]
     country = state.get("country") or "lt"
     case_id, case_number = db_create_case(chat_id, user_text)
-    state.update({"case_text": user_text, "case_id": case_id, "case_number": case_number, "awaiting_followup": False})
+    state.update({"case_text": user_text, "case_id": case_id, "case_number": case_number, "awaiting_followup": False, "files": []})
     send_message(chat_id, TEXT[lang]["case_created"].format(case_number=case_number))
 
     active, until = db_subscription_active(chat_id)
@@ -924,11 +945,11 @@ def create_case_from_text(chat_id: int, user_text: str):
 def handle_file(chat_id: int, msg: dict):
     state = get_state(chat_id)
     lang = state["lang"]
-    country = state.get("country") or "lt"
 
     file_id = None
     file_name = "uploaded_file"
     file_type = "unknown"
+    caption = (msg.get("caption") or "").strip()
 
     if msg.get("document"):
         doc = msg["document"]
@@ -955,62 +976,67 @@ def handle_file(chat_id: int, msg: dict):
 
     created_now = False
     if not state.get("case_id"):
-        base = f"Įkelta byla iš failo: {file_name}" if lang == "lt" else f"Case created from file: {file_name}"
+        base = f"Byla sukurta iš dokumento: {file_name}" if lang == "lt" else f"Case created from document: {file_name}"
+        if caption:
+            base += f"\n\nVartotojo komentaras: {caption}" if lang == "lt" else f"\n\nUser comment: {caption}"
         case_id, case_number = db_create_case(chat_id, base)
-        state.update({"case_id": case_id, "case_number": case_number, "case_text": base})
+        state.update({"case_id": case_id, "case_number": case_number, "case_text": base, "files": []})
         created_now = True
 
     db_add_case_file(state["case_id"], file_name, file_type, file_id)
+    state.setdefault("files", []).append(file_name)
 
+    additions = []
+    if caption:
+        additions.append(f"--- VARTOTOJO KOMENTARAS PRIE FAILO {file_name} ---\n{caption}")
     if extracted:
-        state["case_text"] = (state.get("case_text") or "") + f"\n\n--- FILE: {file_name} ---\n{extracted[:6000]}"
+        additions.append(f"--- FILE: {file_name} ---\n{extracted[:6000]}")
+
+    if additions:
+        state["case_text"] = (state.get("case_text") or "") + "\n\n" + "\n\n".join(additions)
         db_update_case(state["case_id"], state["case_text"])
-        if lang == "lt":
+
+    if lang == "lt":
+        if created_now:
             status_text = (
                 f"📁 Byla sukurta\n\n"
                 f"🆔 Bylos Nr.: {state.get('case_number')}\n\n"
-                f"📎 Dokumentas pridėtas prie bylos.\n\n"
-                f"⚖️ Analizuoju pateiktą informaciją..."
-            ) if created_now else (
-                f"📎 Dokumentas pridėtas prie bylos.\n\n"
-                f"⚖️ Analizuoju pateiktą informaciją..."
+                f"📎 Dokumentas pridėtas prie bylos."
             )
-        elif lang == "no":
+        else:
+            status_text = "📎 Dokumentas pridėtas prie bylos."
+        if not extracted:
+            status_text += "\n\n⚠️ Teksto nuskaityti nepavyko. Jei dokumente yra svarbi informacija, trumpai aprašykite ją viena žinute."
+        else:
+            status_text += "\n\n✅ Galite įkelti daugiau dokumentų arba pradėti bendrą bylos analizę."
+    elif lang == "no":
+        if created_now:
             status_text = (
                 f"📁 Sak opprettet\n\n"
                 f"🆔 Saksnr.: {state.get('case_number')}\n\n"
-                f"📎 Dokumentet er lagt til saken.\n\n"
-                f"⚖️ Analyserer innsendt informasjon..."
-            ) if created_now else (
-                f"📎 Dokumentet er lagt til saken.\n\n"
-                f"⚖️ Analyserer innsendt informasjon..."
+                f"📎 Dokumentet er lagt til saken."
             )
         else:
+            status_text = "📎 Dokumentet er lagt til saken."
+        if not extracted:
+            status_text += "\n\n⚠️ Tekst kunne ikke leses. Hvis dokumentet inneholder viktig informasjon, beskriv det kort i én melding."
+        else:
+            status_text += "\n\n✅ Du kan laste opp flere dokumenter eller starte samlet analyse."
+    else:
+        if created_now:
             status_text = (
                 f"📁 Case created\n\n"
                 f"🆔 Case No.: {state.get('case_number')}\n\n"
-                f"📎 Document added to the case.\n\n"
-                f"⚖️ Analyzing the submitted information..."
-            ) if created_now else (
-                f"📎 Document added to the case.\n\n"
-                f"⚖️ Analyzing the submitted information..."
+                f"📎 Document added to the case."
             )
-        send_message(chat_id, status_text)
-    else:
-        send_message(chat_id, TEXT[lang]["file_no_text"])
+        else:
+            status_text = "📎 Document added to the case."
+        if not extracted:
+            status_text += "\n\n⚠️ Text could not be extracted. If the document contains important information, briefly describe it in one message."
+        else:
+            status_text += "\n\n✅ You can upload more documents or start the combined case analysis."
 
-    active, _ = db_subscription_active(chat_id)
-    if active:
-        full_text = f"Bylos numeris: {state.get('case_number')}\n\n{state.get('case_text')}"
-        answer = openai_request(build_case_prompt(full_text, lang, country, full=True), lang)
-        if not answer:
-            err = "⚠️ Analizės šiuo metu nepavyko atlikti. Bandykite dar kartą po kelių minučių." if lang == "lt" else "⚠️ The analysis could not be completed right now. Please try again in a few minutes."
-            send_message(chat_id, err)
-            return
-        send_chunks(chat_id, answer, reply_markup=after_full_menu(lang))
-    else:
-        send_message(chat_id, TEXT[lang]["initial"])
-        send_message(chat_id, TEXT[lang]["choose_plan"], reply_markup=plan_menu(lang))
+    send_message(chat_id, status_text, reply_markup=file_action_menu(lang))
 
 
 @app.route("/", methods=["GET"])
@@ -1078,6 +1104,41 @@ def telegram_webhook():
                 else:
                     state["awaiting_followup"] = True
                     send_message(chat_id, TEXT[lang]["ask_prompt"])
+
+            elif data == "upload_more":
+                if lang == "lt":
+                    send_message(chat_id, "📎 Įkelkite kitą dokumentą arba paspauskite „✅ Analizuoti bylą“.", reply_markup=file_action_menu(lang))
+                elif lang == "no":
+                    send_message(chat_id, "📎 Last opp et annet dokument eller trykk «✅ Analyser saken».", reply_markup=file_action_menu(lang))
+                else:
+                    send_message(chat_id, "📎 Upload another document or press “✅ Analyze case”.", reply_markup=file_action_menu(lang))
+
+            elif data == "case_docs":
+                files = state.get("files") or []
+                if not files:
+                    send_message(chat_id, "📂 Bylos dokumentų dar nėra." if lang == "lt" else "📂 No case documents yet.", reply_markup=file_action_menu(lang))
+                else:
+                    lines = [f"{i + 1}. {name}" for i, name in enumerate(files)]
+                    title = "📂 Bylos dokumentai:" if lang == "lt" else ("📂 Saksdokumenter:" if lang == "no" else "📂 Case documents:")
+                    send_message(chat_id, title + "\n\n" + "\n".join(lines), reply_markup=file_action_menu(lang))
+
+            elif data == "analyze_case":
+                if not state.get("case_text"):
+                    send_message(chat_id, TEXT[lang]["no_case"])
+                else:
+                    active, until = db_subscription_active(chat_id)
+                    if active:
+                        send_message(chat_id, TEXT[lang]["thinking"])
+                        full_text = f"Bylos numeris: {state.get('case_number')}\n\n{state.get('case_text')}"
+                        answer = openai_request(build_case_prompt(full_text, lang, state.get("country") or "lt", full=True), lang)
+                        if not answer:
+                            err = "⚠️ Analizės šiuo metu nepavyko atlikti. Bandykite dar kartą po kelių minučių." if lang == "lt" else "⚠️ The analysis could not be completed right now. Please try again in a few minutes."
+                            send_message(chat_id, err)
+                        else:
+                            send_chunks(chat_id, answer, reply_markup=after_full_menu(lang))
+                    else:
+                        send_message(chat_id, TEXT[lang]["initial"])
+                        send_message(chat_id, TEXT[lang]["choose_plan"], reply_markup=plan_menu(lang))
 
             elif data == "show_docs":
                 if not state.get("case_text"):
@@ -1159,7 +1220,17 @@ def telegram_webhook():
                 answer = openai_request(build_followup_prompt(state["case_text"], text, lang, state.get("country") or "lt"), lang)
                 send_chunks(chat_id, answer, reply_markup=after_full_menu(lang))
             else:
-                create_case_from_text(chat_id, text)
+                if state.get("case_id") and state.get("case_text"):
+                    state["case_text"] = (state.get("case_text") or "") + f"\n\n--- PAPILDOMA VARTOTOJO INFORMACIJA ---\n{text}"
+                    db_update_case(state["case_id"], state["case_text"])
+                    if lang == "lt":
+                        send_message(chat_id, "✅ Informacija pridėta prie bylos.\n\nGalite įkelti daugiau dokumentų arba pradėti bendrą bylos analizę.", reply_markup=file_action_menu(lang))
+                    elif lang == "no":
+                        send_message(chat_id, "✅ Informasjonen er lagt til saken.\n\nDu kan laste opp flere dokumenter eller starte samlet analyse.", reply_markup=file_action_menu(lang))
+                    else:
+                        send_message(chat_id, "✅ Information added to the case.\n\nYou can upload more documents or start the combined case analysis.", reply_markup=file_action_menu(lang))
+                else:
+                    create_case_from_text(chat_id, text)
 
             return jsonify({"ok": True})
 
