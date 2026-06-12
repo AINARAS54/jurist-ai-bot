@@ -1,5 +1,6 @@
 import os
 import re
+import base64
 import logging
 from io import BytesIO
 from datetime import datetime, timezone, timedelta
@@ -126,31 +127,23 @@ Jeg kan hjelpe med:
 SAFETY_TEXT = {
     "lt": """🔐 Saugumas ir konfidencialumas
 
-• Jūsų pateikta informacija naudojama tik bylos analizei ir dokumentų rengimui.
+• Pateikta informacija naudojama tik bylos analizei ir dokumentų rengimui.
 
-• Duomenys saugomi iki prenumeratos pabaigos.
-
-• Pasibaigus prenumeratai duomenys automatiškai ištrinami.
+• Duomenys saugomi iki prenumeratos pabaigos ir vėliau automatiškai ištrinami.
 
 ✅ Suprantu ir sutinku""",
-
     "en": """🔐 Security and confidentiality
 
-• Your information is used only for case analysis and document preparation.
+• Submitted information is used only for case analysis and document preparation.
 
-• Data is stored until the subscription ends.
-
-• After the subscription ends, the data is automatically deleted.
+• Data is stored until the subscription ends and is then automatically deleted.
 
 ✅ I understand and agree""",
-
     "no": """🔐 Sikkerhet og konfidensialitet
 
-• Informasjonen brukes kun til saksanalyse og dokumentforberedelse.
+• Innsendt informasjon brukes kun til saksanalyse og dokumentforberedelse.
 
-• Data lagres til abonnementet avsluttes.
-
-• Etter at abonnementet avsluttes slettes dataene automatisk.
+• Data lagres til abonnementet avsluttes og slettes deretter automatisk.
 
 ✅ Jeg forstår og godtar""",
 }
@@ -236,15 +229,12 @@ def detect_lang(user: dict) -> str:
 
 def language_for_country_selection(country: str, current_lang: str | None, tg_user: dict | None = None) -> str:
     """
-    Country selection changes only the legal jurisdiction.
-    The bot interface language stays the same as the current/Telegram language.
+    Country is jurisdiction only. It must not change the bot interface language.
+    If in-memory state is lost, use Telegram language as fallback.
     """
     if current_lang in ("lt", "no", "en"):
         return current_lang
-
-    tg_lang = detect_lang(tg_user or {})
-    return tg_lang if tg_lang in ("lt", "no", "en") else "en"
-
+    return detect_lang(tg_user or {})
 
 def welcome_text(lang: str) -> str:
     if lang == "lt":
@@ -384,6 +374,16 @@ def detect_case_type(case_text: str) -> str:
     return "general"
 
 
+def is_police_case(case_text: str) -> bool:
+    text = (case_text or "").lower()
+    return any(x in text for x in [
+        "policija", "politiet", "politi", "prokurat",
+        "henleggelse", "henlagt", "nutrauk", "nutraukt",
+        "skund", "klage", "pareiškim", "pareiskim",
+        "etterforskning", "tyrimas", "bylos eiga", "manglende svar"
+    ])
+
+
 def doc_label(doc_type: str, lang: str, country: str | None = None) -> str:
     country = country or "lt"
     labels = {
@@ -425,12 +425,12 @@ def relevant_doc_types(case_text: str, country: str | None = None) -> list[str]:
         "chargeback", "lėšų", "lesu", "binance", "spectrocoin", "usdc", "crypto", "kript"
     ])
 
-    if case_type == "fraud" or police_context:
-        docs = []
-        if police_context:
-            docs.append("appeal_police_decision")
-        else:
-            docs.append("fraud_report")
+    # If this is a police/prosecution/case-closure matter, do not show bank/seller/consumer documents.
+    if police_context:
+        return ["appeal_police_decision"]
+
+    if case_type == "fraud":
+        docs = ["fraud_report"]
         if bank_context:
             docs.append("bank_refund")
         return docs
@@ -507,21 +507,96 @@ def db_add_case_file(case_id: int, file_name: str, file_type: str, telegram_file
         supabase.table("case_files").insert({"case_id": case_id, "file_name": file_name, "file_type": file_type, "telegram_file_id": telegram_file_id}).execute()
 
 
+def ocr_pdf_images_with_openai(reader: PdfReader, file_name: str) -> str:
+    """
+    Fallback OCR for image-based PDFs using OpenAI vision.
+    This is for Gmail print/PDF exports and scanned PDFs where normal PDF parsers return empty text.
+    It extracts embedded page images with pypdf and sends the largest ones to the vision model.
+    """
+    try:
+        image_payloads = []
+        for page in reader.pages[:3]:
+            page_images = []
+            try:
+                page_images = list(page.images)
+            except Exception:
+                page_images = []
+
+            if not page_images:
+                continue
+
+            # Use the largest embedded images first; small logos/icons are ignored.
+            page_images = sorted(page_images, key=lambda im: len(getattr(im, "data", b"") or b""), reverse=True)
+            for img in page_images[:2]:
+                data = getattr(img, "data", b"") or b""
+                if len(data) < 8000:
+                    continue
+                b64 = base64.b64encode(data).decode("ascii")
+                mime = "image/jpeg"
+                name = (getattr(img, "name", "") or "").lower()
+                if name.endswith(".png"):
+                    mime = "image/png"
+                image_payloads.append({"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}})
+
+        if not image_payloads:
+            return ""
+
+        content = [
+            {
+                "type": "text",
+                "text": (
+                    "Extract all readable text from these PDF page images. "
+                    "Keep names, dates, email addresses, case numbers, addresses, URLs, amounts and document titles. "
+                    "Return plain text only."
+                ),
+            }
+        ] + image_payloads[:4]
+
+        r = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
+            json={
+                "model": OPENAI_MODEL or "gpt-4o-mini",
+                "messages": [{"role": "user", "content": content}],
+                "temperature": 0,
+                "max_tokens": 2500,
+            },
+            timeout=90,
+        )
+        if not r.ok:
+            logger.error("OpenAI OCR error for %s: %s %s", file_name, r.status_code, r.text)
+            return ""
+        return r.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        logger.warning("OpenAI OCR failed for %s: %s", file_name, e)
+        return ""
+
+
 def extract_text_from_file(file_name: str, file_bytes: bytes) -> str:
     lower = (file_name or "").lower()
     try:
         if lower.endswith(".txt"):
-            return file_bytes.decode("utf-8", errors="ignore")
+            return file_bytes.decode("utf-8", errors="ignore").strip()
+
         if lower.endswith(".pdf"):
             reader = PdfReader(BytesIO(file_bytes))
-            return "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+            text = "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+
+            # Image-based PDFs often have no text layer. Try OpenAI vision OCR before giving up.
+            if len(text) < 50:
+                ocr_text = ocr_pdf_images_with_openai(reader, file_name)
+                if len(ocr_text.strip()) > len(text):
+                    text = ocr_text.strip()
+
+            logger.info("Extracted text from %s: %s chars", file_name, len(text))
+            return text
+
         if lower.endswith(".docx"):
             doc = Document(BytesIO(file_bytes))
             return "\n".join(p.text for p in doc.paragraphs).strip()
     except Exception as e:
-        logger.warning("File extraction failed: %s", e)
+        logger.warning("File extraction failed for %s: %s", file_name, e)
     return ""
-
 
 def openai_request(prompt: str, lang: str) -> str:
     r = requests.post(
@@ -1255,6 +1330,12 @@ def telegram_webhook():
                 else:
                     doc_type = data.replace("doc_", "")
                     full_text = state.get('case_text') or ""
+                    # Police/case-closure documents already contain purpose, decision context and supporting docs.
+                    # Do not ask repeated questions when the case text clearly contains police/complaint/closure context.
+                    if doc_type == "appeal_police_decision" and is_police_case(full_text):
+                        generate_document_for_state(chat_id, state, lang, doc_type)
+                        return jsonify({"ok": True})
+
                     check = openai_request(build_doc_missing_prompt(full_text, lang, state.get("country") or "lt", doc_type), lang)
                     missing = parse_missing_doc_questions(check)
                     if missing:
