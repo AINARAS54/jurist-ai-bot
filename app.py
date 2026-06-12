@@ -1,7 +1,7 @@
 import os
 import re
-import base64
 import logging
+import base64
 from io import BytesIO
 from datetime import datetime, timezone, timedelta
 
@@ -19,6 +19,7 @@ app = Flask(__name__)
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip()
+OPENAI_OCR_MODEL = os.getenv("OPENAI_OCR_MODEL", OPENAI_MODEL).strip()
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip() or os.getenv("RENDER_EXTERNAL_URL", "").strip()
@@ -229,12 +230,14 @@ def detect_lang(user: dict) -> str:
 
 def language_for_country_selection(country: str, current_lang: str | None, tg_user: dict | None = None) -> str:
     """
-    Country is jurisdiction only. It must not change the bot interface language.
-    If in-memory state is lost, use Telegram language as fallback.
+    Country selection controls legal jurisdiction only.
+    It must not force the interface language to English or Norwegian.
+    Keep the current/Telegram language stable.
     """
     if current_lang in ("lt", "no", "en"):
         return current_lang
-    return detect_lang(tg_user or {})
+    tg_lang = detect_lang(tg_user or {})
+    return tg_lang if tg_lang in ("lt", "no", "en") else "en"
 
 def welcome_text(lang: str) -> str:
     if lang == "lt":
@@ -355,34 +358,68 @@ def file_action_menu(lang: str):
 
 def detect_case_type(case_text: str) -> str:
     text = (case_text or "").lower()
+
+    police_keywords = [
+        "policija", "politiet", "politi", "police",
+        "prokuratūra", "prokuratura", "prosecutor", "påtalemyndighet",
+        "henleggelse", "henlagt", "nutrauk", "nutraukt", "case closure", "closure",
+        "skund", "klage", "complaint", "appeal",
+        "etterforskning", "tyrimas", "investigation", "saksnummer", "bylos numeris",
+        "manglende saksbehandlingskapasitet", "nepakankam", "trūkstam"
+    ]
     fraud_keywords = [
-        "sukči", "apgav", "scam", "fraud", "deep", "coin", "crypto", "kript", "binance",
+        "sukči", "apgav", "scam", "fraud", "bedrager", "deep", "coin", "crypto", "kript", "binance",
         "invest", "whatsapp", "telegram", "anydesk", "platform", "netikra", "praradau pinigus"
     ]
-    bank_keywords = ["bank", "kortel", "visa", "mastercard", "mokėj", "paved", "chargeback", "lėšų grąž"]
-    seller_keywords = ["prek", "pardav", "užsak", "siunt", "nepristat", "negav", "brok", "garant", "defekt", "grąžinti"]
-    service_keywords = ["sutart", "paslaug", "prenumer", "operator", "internetas", "ryšys"]
+    bank_keywords = [
+        "bank", "kortel", "visa", "mastercard", "mokėj", "mokej", "paved",
+        "chargeback", "refund", "payment recall", "lėšų grąž", "tilbakeføring"
+    ]
+    consumer_keywords = [
+        "pardav", "prek", "užsak", "siunt", "nepristat", "negav", "brok", "garant", "defekt", "grąžinti",
+        "seller", "merchant", "order", "delivery", "forbruker", "selger", "vare", "bestilling"
+    ]
+    service_keywords = ["sutart", "paslaug", "prenumer", "operator", "internetas", "ryšys", "contract", "service"]
 
+    # Police context has priority. A fraud case can also be a police-process case after a complaint/closure.
+    if any(k in text for k in police_keywords):
+        return "police"
     if any(k in text for k in fraud_keywords):
         return "fraud"
     if any(k in text for k in bank_keywords):
         return "bank"
-    if any(k in text for k in seller_keywords):
-        return "seller"
+    if any(k in text for k in consumer_keywords):
+        return "consumer"
     if any(k in text for k in service_keywords):
         return "service"
     return "general"
 
 
 def is_police_case(case_text: str) -> bool:
-    text = (case_text or "").lower()
-    return any(x in text for x in [
-        "policija", "politiet", "politi", "prokurat",
-        "henleggelse", "henlagt", "nutrauk", "nutraukt",
-        "skund", "klage", "pareiškim", "pareiskim",
-        "etterforskning", "tyrimas", "bylos eiga", "manglende svar"
-    ])
+    return detect_case_type(case_text) == "police"
 
+
+def has_enough_context_for_doc(case_text: str, files: list, doc_type: str) -> bool:
+    """Avoid unnecessary questions when the case already contains enough context."""
+    text = (case_text or "").lower()
+    file_count = len(files or [])
+
+    if doc_type == "appeal_police_decision" and is_police_case(case_text):
+        # If the case contains police/closure/complaint context or any supporting document, generate directly.
+        return file_count >= 1 or any(k in text for k in [
+            "henlegg", "nutrauk", "politi", "politiet", "policija", "skund", "klage", "saksnummer", "bylos numeris"
+        ])
+
+    if doc_type == "fraud_report" and detect_case_type(case_text) in ("fraud", "police"):
+        return bool(text.strip())
+
+    if doc_type == "bank_refund" and detect_case_type(case_text) == "bank":
+        return any(k in text for k in ["bank", "visa", "mastercard", "paved", "mokėj", "payment", "amount", "suma"])
+
+    if doc_type == "seller_claim" and detect_case_type(case_text) in ("consumer", "service"):
+        return any(k in text for k in ["pardav", "seller", "selger", "prek", "order", "užsak", "bestilling"])
+
+    return False
 
 def doc_label(doc_type: str, lang: str, country: str | None = None) -> str:
     country = country or "lt"
@@ -416,33 +453,26 @@ def relevant_doc_types(case_text: str, country: str | None = None) -> list[str]:
     text = (case_text or "").lower()
     case_type = detect_case_type(case_text)
 
-    police_context = any(k in text for k in [
-        "policija", "politiet", "politi", "pareiškim", "pareiskim", "skund",
-        "nutrauk", "henlegg", "atmet", "neatsak", "atsakymo negav", "bylos eiga"
-    ])
-    bank_context = any(k in text for k in [
-        "bank", "kortel", "visa", "mastercard", "mokėj", "mokej", "paved",
-        "chargeback", "lėšų", "lesu", "binance", "spectrocoin", "usdc", "crypto", "kript"
-    ])
-
-    # If this is a police/prosecution/case-closure matter, do not show bank/seller/consumer documents.
-    if police_context:
+    # Police/prosecution process cases must not show seller/bank documents unless bank recovery is the clear main request.
+    if case_type == "police":
         return ["appeal_police_decision"]
 
     if case_type == "fraud":
         docs = ["fraud_report"]
+        bank_context = any(k in text for k in [
+            "bank", "kortel", "visa", "mastercard", "mokėj", "mokej", "paved", "chargeback", "payment recall", "bank refund"
+        ])
         if bank_context:
             docs.append("bank_refund")
         return docs
 
     if case_type == "bank":
-        return ["bank_refund", "authority_complaint"]
-    if case_type == "seller":
-        return ["seller_claim", "bank_refund", "authority_complaint"]
+        return ["bank_refund"]
+    if case_type == "consumer":
+        return ["seller_claim", "authority_complaint"]
     if case_type == "service":
         return ["seller_claim", "authority_complaint"]
     return ["authority_complaint"]
-
 
 def doc_menu(lang: str, case_text: str = "", country: str | None = None):
     rows = []
@@ -507,68 +537,80 @@ def db_add_case_file(case_id: int, file_name: str, file_type: str, telegram_file
         supabase.table("case_files").insert({"case_id": case_id, "file_name": file_name, "file_type": file_type, "telegram_file_id": telegram_file_id}).execute()
 
 
-def ocr_pdf_images_with_openai(reader: PdfReader, file_name: str) -> str:
-    """
-    Fallback OCR for image-based PDFs using OpenAI vision.
-    This is for Gmail print/PDF exports and scanned PDFs where normal PDF parsers return empty text.
-    It extracts embedded page images with pypdf and sends the largest ones to the vision model.
-    """
-    try:
-        image_payloads = []
-        for page in reader.pages[:3]:
-            page_images = []
-            try:
-                page_images = list(page.images)
-            except Exception:
-                page_images = []
+def openai_vision_ocr_from_pdf(file_bytes: bytes, max_pages: int = 2) -> str:
+    """OCR image-based PDF pages with OpenAI Vision.
 
-            if not page_images:
+    Requires PyMuPDF in requirements.txt: PyMuPDF
+    If PyMuPDF is unavailable, this safely returns an empty string.
+    """
+    if not file_bytes:
+        return ""
+    try:
+        import fitz  # PyMuPDF
+    except Exception as e:
+        logger.warning("OCR skipped: PyMuPDF not installed or import failed: %s", e)
+        return ""
+
+    try:
+        logger.info("PDF OCR START")
+        pdf = fitz.open(stream=file_bytes, filetype="pdf")
+        page_count = min(len(pdf), max_pages)
+        ocr_parts = []
+
+        for page_index in range(page_count):
+            page = pdf.load_page(page_index)
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+            png_bytes = pix.tobytes("png")
+            image_b64 = base64.b64encode(png_bytes).decode("utf-8")
+
+            r = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENAI_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": OPENAI_OCR_MODEL,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are an OCR engine. Extract all readable text from the image. "
+                                "Keep names, dates, case numbers, emails, URLs and addresses exactly as visible. "
+                                "Return only extracted text, no explanation."
+                            ),
+                        },
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": "Extract all text from this PDF page image."},
+                                {
+                                    "type": "image_url",
+                                    "image_url": {"url": f"data:image/png;base64,{image_b64}"},
+                                },
+                            ],
+                        },
+                    ],
+                    "temperature": 0,
+                    "max_tokens": 2500,
+                },
+                timeout=90,
+            )
+
+            if not r.ok:
+                logger.error("OpenAI OCR error page %s: %s %s", page_index + 1, r.status_code, r.text[:500])
                 continue
 
-            # Use the largest embedded images first; small logos/icons are ignored.
-            page_images = sorted(page_images, key=lambda im: len(getattr(im, "data", b"") or b""), reverse=True)
-            for img in page_images[:2]:
-                data = getattr(img, "data", b"") or b""
-                if len(data) < 8000:
-                    continue
-                b64 = base64.b64encode(data).decode("ascii")
-                mime = "image/jpeg"
-                name = (getattr(img, "name", "") or "").lower()
-                if name.endswith(".png"):
-                    mime = "image/png"
-                image_payloads.append({"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}})
+            text = r.json()["choices"][0]["message"]["content"].strip()
+            logger.info("OCR page %s text length: %s", page_index + 1, len(text))
+            if text:
+                ocr_parts.append(f"--- OCR PAGE {page_index + 1} ---\n{text}")
 
-        if not image_payloads:
-            return ""
-
-        content = [
-            {
-                "type": "text",
-                "text": (
-                    "Extract all readable text from these PDF page images. "
-                    "Keep names, dates, email addresses, case numbers, addresses, URLs, amounts and document titles. "
-                    "Return plain text only."
-                ),
-            }
-        ] + image_payloads[:4]
-
-        r = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
-            json={
-                "model": OPENAI_MODEL or "gpt-4o-mini",
-                "messages": [{"role": "user", "content": content}],
-                "temperature": 0,
-                "max_tokens": 2500,
-            },
-            timeout=90,
-        )
-        if not r.ok:
-            logger.error("OpenAI OCR error for %s: %s %s", file_name, r.status_code, r.text)
-            return ""
-        return r.json()["choices"][0]["message"]["content"].strip()
+        result = "\n\n".join(ocr_parts).strip()
+        logger.info("PDF OCR DONE, total text length: %s", len(result))
+        return result
     except Exception as e:
-        logger.warning("OpenAI OCR failed for %s: %s", file_name, e)
+        logger.exception("PDF OCR failed: %s", e)
         return ""
 
 
@@ -576,27 +618,34 @@ def extract_text_from_file(file_name: str, file_bytes: bytes) -> str:
     lower = (file_name or "").lower()
     try:
         if lower.endswith(".txt"):
-            return file_bytes.decode("utf-8", errors="ignore").strip()
+            return file_bytes.decode("utf-8", errors="ignore")
 
         if lower.endswith(".pdf"):
-            reader = PdfReader(BytesIO(file_bytes))
-            text = "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+            extracted = ""
+            try:
+                reader = PdfReader(BytesIO(file_bytes))
+                extracted = "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+                logger.info("PDF pypdf text length: %s", len(extracted))
+            except Exception as e:
+                logger.warning("pypdf extraction failed: %s", e)
 
-            # Image-based PDFs often have no text layer. Try OpenAI vision OCR before giving up.
-            if len(text) < 50:
-                ocr_text = ocr_pdf_images_with_openai(reader, file_name)
-                if len(ocr_text.strip()) > len(text):
-                    text = ocr_text.strip()
+            if len(extracted.strip()) >= 50:
+                return extracted
 
-            logger.info("Extracted text from %s: %s chars", file_name, len(text))
-            return text
+            logger.info("PDF text layer too short. Starting OCR fallback.")
+            ocr_text = openai_vision_ocr_from_pdf(file_bytes)
+            if len(ocr_text.strip()) >= 20:
+                return ocr_text
+
+            return extracted
 
         if lower.endswith(".docx"):
             doc = Document(BytesIO(file_bytes))
             return "\n".join(p.text for p in doc.paragraphs).strip()
     except Exception as e:
-        logger.warning("File extraction failed for %s: %s", file_name, e)
+        logger.warning("File extraction failed: %s", e)
     return ""
+
 
 def openai_request(prompt: str, lang: str) -> str:
     r = requests.post(
@@ -627,19 +676,27 @@ Atsakyk tik lietuviškai. Taikoma šalis / jurisdikcija: {country_name}.
 
 Paruošk trumpą pilną bylos vertinimą Telegram formatui.
 
-Naudok tik šiuos skyrius:
+Naudok tik šiuos skyrius ir tarp skyrių palik tuščią eilutę:
 
-🆔 Bylos numeris
+⚖️ Bylos analizė
+
 📋 Situacija
+
 ⚖️ Galimai taikytini teisės aktai
+
 🎯 Rekomenduojami veiksmai
+
 📄 Galimi dokumentai
 
 Taisyklės:
-- Atsakymas turi tilpti į 8–15 eilučių.
+- Atsakymas turi būti trumpas, bet skaitomas Telegram telefone.
+- Tarp kiekvienos temos palik aiškius tarpus.
+- Nerašyk vidinio Justice AI bylos numerio kaip atskiro skyriaus.
 - Nekurk ilgos ataskaitos.
 - Nerodyk skyrių „Reikalingi įrodymai“, „Bylos stiprumas“, „Klausimai bylai patikslinti“ ir „Praktiniai pasiūlymai“, nebent vartotojas to aiškiai prašo.
 - Pinigų grąžinimo per banką skyrių rodyk tik jei byla tiesiogiai susijusi su kortelės ar bankiniu mokėjimu.
+- Skyriuje „Galimi dokumentai“ rodyk tik dokumentus, kuriuos Justice AI gali sugeneruoti, o ne jau įkeltų failų pavadinimus.
+- Jei byla yra apie policijos sprendimą, tyrimo nutraukimą ar institucijos neveikimą, „Galimi dokumentai“ turi rodyti tik: Skundas dėl tyrimo nutraukimo / neveikimo.
 - Jei byla apie policijos sprendimą, tyrimo nutraukimą, neatsakytą skundą ar bylos eigą, rekomenduok veiksmus policijos / prokuratūros procese, o ne vartotojų instituciją.
 - Nurodyk įstatymų, direktyvų arba kodeksų pavadinimus ir straipsnių / paragrafų numerius, jei jie gali būti aktualūs.
 - Neteik kategoriško teiginio, kad nusikaltimas įvykdytas. Naudok: „galimai taikytina“, „gali būti aktualu“, „gali būti vertinama pagal“.
@@ -669,7 +726,7 @@ Situacija:
         return f"""
 Svar kun på norsk. Jurisdiksjon: {country_name}.
 
-Lag {'en kort full vurdering' if full else 'en kort førstevurdering'} for Telegram. Bruk 8-15 linjer. Ta med relevante lover og paragrafnumre når mulig. Ikke påstå at en straffbar handling definitivt har skjedd. Ikke vis lange bevislister, saksstyrke, spørsmål eller forslag med mindre brukeren ber om det.
+Lag {'en kort full vurdering' if full else 'en kort førstevurdering'} for Telegram med tydelige mellomrom mellom temaene. Ta med relevante lover og paragrafnumre når mulig. Ikke påstå at en straffbar handling definitivt har skjedd. Ikke vis lange bevislister, saksstyrke, spørsmål eller forslag med mindre brukeren ber om det. I delen om mulige dokumenter skal du bare vise dokumenter Justice AI kan generere, ikke opplastede filnavn.
 
 Saksinformasjon:
 {case_text}
@@ -678,7 +735,7 @@ Saksinformasjon:
     return f"""
 Answer only in English. Jurisdiction: {country_name}.
 
-Prepare {'a concise full case review' if full else 'a short initial assessment'} for Telegram in 8-15 lines. Include relevant law names and article/section numbers where possible. Do not state that a crime definitely occurred. Do not show long evidence lists, case strength, questions or suggestions unless the user asks for them.
+Prepare {'a concise full case review' if full else 'a short initial assessment'} for Telegram with clear blank lines between sections. Include relevant law names and section numbers where possible. Do not state that a crime definitely occurred. Do not show long evidence lists, case strength, questions or suggestions unless the user asks for them. In the possible documents section, list only documents Justice AI can generate, not uploaded filenames.
 
 Case information:
 {case_text}
@@ -858,6 +915,9 @@ Svarbu:
 - Dokumento tikslą, prašymo esmę, datą, terminą ir adresatą pirmiausia nustatyk iš bylos ir PDF dokumentų. Neklausk apie juos, jei tai galima suprasti iš konteksto.
 - Kontaktinis telefonas nėra būtinas, jei jo nėra byloje; jo neklausk, nebent dokumento tipui jis kritiškai būtinas.
 - Jei trūksta tik nebūtinų duomenų, atsakyk READY.
+- Jei dokumento tipas yra skundas dėl tyrimo nutraukimo / neveikimo ir byloje jau yra policijos, skundo, tyrimo nutraukimo arba bylos eigos kontekstas, atsakyk READY.
+- Neklausk skundo tikslo, tyrimo tęsimo priežasčių ar ar yra papildomų dokumentų, jei byloje jau yra bent vienas dokumentas arba tekstas apie policiją / skundą / nutraukimą.
+
 - Klausimą užduok tik tada, kai trūksta pareiškėjo vardo / pavardės arba visiškai neįmanoma nustatyti oficialaus prašymo tikslo iš bylos.
 - Klausimus užduok tik dėl tikrai svarbių duomenų, be kurių dokumentas būtų nepilnas arba netikslus.
 - Maksimaliai 3 klausimai.
@@ -890,6 +950,9 @@ Important:
 - First infer document purpose, request, date/timeframe and recipient from the case and PDF documents. Do not ask about them if they can be understood from context.
 - A phone number is not mandatory; do not ask for it unless it is critical for the document type.
 - If only non-essential data is missing, answer READY.
+- If the document type is an appeal against case closure / inaction and the case already contains police, complaint, closure or case-progress context, answer READY.
+- Do not ask about the complaint purpose, reasons for continuing the investigation or whether there are supporting documents if the case already contains at least one document or text about police / complaint / closure.
+
 - Ask only if the claimant full name is missing or if the official request purpose is impossible to determine from the case.
 - Ask only for essential missing data without which the document would be incomplete or inaccurate.
 - Maximum 3 questions.
@@ -1330,20 +1393,20 @@ def telegram_webhook():
                 else:
                     doc_type = data.replace("doc_", "")
                     full_text = state.get('case_text') or ""
-                    # Police/case-closure documents already contain purpose, decision context and supporting docs.
-                    # Do not ask repeated questions when the case text clearly contains police/complaint/closure context.
-                    if doc_type == "appeal_police_decision" and is_police_case(full_text):
-                        generate_document_for_state(chat_id, state, lang, doc_type)
-                        return jsonify({"ok": True})
 
-                    check = openai_request(build_doc_missing_prompt(full_text, lang, state.get("country") or "lt", doc_type), lang)
-                    missing = parse_missing_doc_questions(check)
-                    if missing:
-                        state["awaiting_doc_details"] = True
-                        state["pending_doc_type"] = doc_type
-                        send_message(chat_id, missing_doc_message(lang, missing))
-                    else:
+                    # If the case already has enough context for this document type, generate immediately.
+                    # This prevents repeated unnecessary questions in police / bank / consumer cases.
+                    if has_enough_context_for_doc(full_text, state.get("files") or [], doc_type):
                         generate_document_for_state(chat_id, state, lang, doc_type)
+                    else:
+                        check = openai_request(build_doc_missing_prompt(full_text, lang, state.get("country") or "lt", doc_type), lang)
+                        missing = parse_missing_doc_questions(check)
+                        if missing:
+                            state["awaiting_doc_details"] = True
+                            state["pending_doc_type"] = doc_type
+                            send_message(chat_id, missing_doc_message(lang, missing))
+                        else:
+                            generate_document_for_state(chat_id, state, lang, doc_type)
 
             return jsonify({"ok": True})
 
@@ -1394,9 +1457,8 @@ def telegram_webhook():
                 state["awaiting_doc_details"] = False
                 doc_type = state.get("pending_doc_type") or "authority_complaint"
                 state["pending_doc_type"] = None
-                state["case_text"] = (state.get("case_text") or "") + f"\n\n--- PAPILDOMI DUOMENYS DOKUMENTUI ---\n{text}"
-                if state.get("case_id"):
-                    db_update_case(state["case_id"], state["case_text"])
+                # Store document-specific details separately. Do not pollute the main case text.
+                state["doc_extra_data"] = (state.get("doc_extra_data") or "") + f"\n\n{text.strip()}"
                 generate_document_for_state(chat_id, state, lang, doc_type)
             elif state.get("awaiting_followup") and state.get("case_text"):
                 state["awaiting_followup"] = False
