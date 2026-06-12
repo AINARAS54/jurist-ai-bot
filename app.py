@@ -507,17 +507,87 @@ def db_add_case_file(case_id: int, file_name: str, file_type: str, telegram_file
         supabase.table("case_files").insert({"case_id": case_id, "file_name": file_name, "file_type": file_type, "telegram_file_id": telegram_file_id}).execute()
 
 
+def clean_extracted_text(text: str) -> str:
+    if not text:
+        return ""
+    text = text.replace("\x00", " ")
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def extract_pdf_text_pypdf(file_bytes: bytes) -> str:
+    try:
+        reader = PdfReader(BytesIO(file_bytes))
+        text = "\n".join((page.extract_text() or "") for page in reader.pages)
+        return clean_extracted_text(text)
+    except Exception as e:
+        logger.warning("pypdf extraction failed: %s", e)
+        return ""
+
+
+def extract_pdf_text_pymupdf(file_bytes: bytes) -> str:
+    try:
+        import fitz  # PyMuPDF, optional dependency
+
+        with fitz.open(stream=file_bytes, filetype="pdf") as pdf:
+            text = "\n".join(page.get_text("text") or "" for page in pdf)
+        return clean_extracted_text(text)
+    except Exception as e:
+        logger.warning("PyMuPDF extraction unavailable/failed: %s", e)
+        return ""
+
+
+def extract_pdf_text_pdfplumber(file_bytes: bytes) -> str:
+    try:
+        import pdfplumber  # optional dependency
+
+        with pdfplumber.open(BytesIO(file_bytes)) as pdf:
+            text = "\n".join((page.extract_text() or "") for page in pdf.pages)
+        return clean_extracted_text(text)
+    except Exception as e:
+        logger.warning("pdfplumber extraction unavailable/failed: %s", e)
+        return ""
+
+
+def extract_pdf_text_ocr(file_bytes: bytes) -> str:
+    try:
+        import fitz  # PyMuPDF, optional dependency
+        import pytesseract  # optional dependency
+        from PIL import Image  # optional dependency
+
+        parts = []
+        with fitz.open(stream=file_bytes, filetype="pdf") as pdf:
+            # Limit OCR to first 10 pages to avoid long Render timeouts.
+            for page in pdf[:10]:
+                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+                img = Image.open(BytesIO(pix.tobytes("png")))
+                page_text = pytesseract.image_to_string(img, lang="eng+nor+lit")
+                if page_text:
+                    parts.append(page_text)
+        return clean_extracted_text("\n".join(parts))
+    except Exception as e:
+        logger.warning("OCR extraction unavailable/failed: %s", e)
+        return ""
+
+
 def extract_text_from_file(file_name: str, file_bytes: bytes) -> str:
     lower = (file_name or "").lower()
     try:
         if lower.endswith(".txt"):
-            return file_bytes.decode("utf-8", errors="ignore")
+            return clean_extracted_text(file_bytes.decode("utf-8", errors="ignore"))
+
         if lower.endswith(".pdf"):
-            reader = PdfReader(BytesIO(file_bytes))
-            return "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+            # Try several extractors. Some PDFs work with one library and fail with another.
+            for extractor in (extract_pdf_text_pymupdf, extract_pdf_text_pdfplumber, extract_pdf_text_pypdf, extract_pdf_text_ocr):
+                text = extractor(file_bytes)
+                if len(text) >= 20:
+                    return text
+            return ""
+
         if lower.endswith(".docx"):
             doc = Document(BytesIO(file_bytes))
-            return "\n".join(p.text for p in doc.paragraphs).strip()
+            return clean_extracted_text("\n".join(p.text for p in doc.paragraphs))
     except Exception as e:
         logger.warning("File extraction failed: %s", e)
     return ""
@@ -1280,12 +1350,8 @@ def telegram_webhook():
                     send_message(chat_id, TEXT[lang]["ask_prompt"])
 
             elif data == "upload_more":
-                if lang == "lt":
-                    send_message(chat_id, "📎 Įkelkite kitą dokumentą arba paspauskite „✅ Analizuoti bylą“.", reply_markup=file_action_menu(lang))
-                elif lang == "no":
-                    send_message(chat_id, "📎 Last opp et annet dokument eller trykk «✅ Analyser saken».", reply_markup=file_action_menu(lang))
-                else:
-                    send_message(chat_id, "📎 Upload another document or press “✅ Analyze case”.", reply_markup=file_action_menu(lang))
+                # Kept only for old Telegram messages that may still contain this callback.
+                send_message(chat_id, TEXT[lang]["collect_case"], reply_markup=file_action_menu(lang))
 
             elif data == "case_docs":
                 files = state.get("files") or []
