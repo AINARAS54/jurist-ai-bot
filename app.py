@@ -638,7 +638,9 @@ Svarbiausios taisyklės:
 - Jei konkretaus duomens nėra, jo eilutę praleisk. Neįterpk instrukcinių tekstų laužtiniuose skliaustuose.
 - Jeigu prieš dokumento generavimą vartotojas pateikė papildomus trūkstamus duomenis, naudok juos dokumente.
 - Dokumento adresatą nustatyk automatiškai pagal dokumento tipą, pasirinktą šalį ir bylos turinį. Neklausk „Kam adresuoti dokumentą?“, nebent byloje visiškai neaišku, ar dokumentas turi būti skirtas pardavėjui, bankui, policijai ar institucijai.
+- Jei byla susijusi su policijos atsakymu, nutrauktu tyrimu, skundu dėl bylos eigos ar neatsakytu el. laišku, adresatą rinkis policijos instituciją, o ne vartotojų teisių instituciją.
 - Nenaudok frazių: [Čia pateikite...], [Jei yra priedų...], [Paraiška pridedama].
+- Niekada nepalik tuščių laukų ar laužtinių skliaustų dokumente. Jei privalomas duomuo nežinomas, dokumento negeneruok ir atsakyk: NEED_MORE_DATA: ...
 - Dokumentas turi būti pilnai užpildytas ir paruoštas siuntimui.
 - Dokumentą pradėk nuo tinkamo gavėjo pagal pasirinktą šalį ir dokumento antraštės.
 - Jei pasirinkta Norvegija, nenaudok Lietuvos institucijų, nebent byloje aiškiai nurodyta, kad ginčas nagrinėjamas Lietuvoje.
@@ -670,7 +672,9 @@ Rules:
 - If a data point is missing, omit that line instead of adding instructional bracket text.
 - If the user provided additional missing data before document generation, use it in the document.
 - Determine the document recipient automatically from the document type, selected jurisdiction and case content. Do not ask who the document should be addressed to unless it is completely unclear whether it should go to a seller, bank, police or authority.
+- If the case concerns police response, discontinued investigation, case status, complaint progress or unanswered email, choose the police authority as recipient, not a consumer authority.
 - Do not use instructional phrases like [insert details here].
+- Never leave placeholders or square brackets in the document. If mandatory information is still missing, do not generate the document and reply: NEED_MORE_DATA: ...
 - The document must be complete and ready to send.
 - Start with the correct recipient for the selected jurisdiction and the document title.
 - If Norway is selected, do not use Lithuanian institutions unless the case explicitly concerns Lithuania.
@@ -702,11 +706,16 @@ Patikrink, ar pakanka duomenų pilnai užpildytam dokumentui: {doc}.
 Adresatą nustatyk automatiškai pagal šias gaires: {recipient_hint}
 
 Svarbu:
-- Neklausk „Kam adresuoti dokumentą?“, jei adresatą galima nustatyti iš dokumento tipo, jurisdikcijos ir bylos turinio.
+- Pirmiausia pats nustatyk adresatą iš bylos konteksto, dokumento tipo ir pasirinktos šalies.
+- Neklausk „Kam adresuoti dokumentą?“, jei galima suprasti, ar dokumentas skirtas pardavėjui, bankui, policijai ar institucijai.
+- Jei byla susijusi su policijos sprendimu, skundo eiga, neatsakytu el. laišku ar tyrimo nutraukimu, adresatas yra policijos institucija, ne vartotojų teisių institucija.
+- Dokumentą generuoti galima tik tada, kai žinomi esminiai duomenys: pareiškėjo vardas ir pavardė, dokumento tikslas, įvykio / siuntimo data arba aiškus laikotarpis, ir konkretus prašymas.
+- Jei trūksta pareiškėjo vardo, datos / laikotarpio, policijos bylos numerio arba kontaktinio duomens, užduok klausimą.
 - Jei trūksta tik nebūtinų duomenų, atsakyk READY.
 - Klausimus užduok tik dėl tikrai svarbių duomenų, be kurių dokumentas būtų nepilnas arba netikslus.
 - Maksimaliai 3 klausimai.
 - Klausimai turi būti trumpi ir konkretūs.
+- Neklausk abstrakčių klausimų kaip „kokia informacija jus domina“. Klausk konkrečių trūkstamų faktų.
 
 Atsakyk tik vienu iš šių formatų:
 READY
@@ -728,11 +737,16 @@ Check whether there is enough information to generate a complete document: {doc}
 Determine the recipient automatically using this guidance: {recipient_hint}
 
 Important:
-- Do not ask who the document should be addressed to if it can be determined from the document type, jurisdiction and case content.
+- First determine the recipient from case context, document type and selected jurisdiction.
+- Do not ask who the document should be addressed to if it can be determined whether it goes to a seller, bank, police or authority.
+- If the case concerns police decision, complaint progress, unanswered email or discontinued investigation, the recipient is a police authority, not a consumer authority.
+- Generate the document only when essential data is known: claimant full name, document purpose, event/sent date or clear timeframe, and exact request.
+- If claimant name, date/timeframe, police case number or contact detail is missing, ask for it.
 - If only non-essential data is missing, answer READY.
 - Ask only for essential missing data without which the document would be incomplete or inaccurate.
 - Maximum 3 questions.
 - Questions must be short and specific.
+- Do not ask abstract questions like “what information are you interested in”; ask for concrete missing facts.
 
 Reply only in one of these formats:
 READY
@@ -763,11 +777,52 @@ def parse_missing_doc_questions(answer: str) -> str:
 
 def missing_doc_message(lang: str, questions: str) -> str:
     if lang == "lt":
-        return "📋 Dokumentui trūksta kelių svarbių duomenų:\n\n" + questions + "\n\nAtsakykite viena žinute."
+        return "📋 Dokumentui parengti trūksta duomenų:\n\n" + questions + "\n\nAtsakykite viena žinute."
     if lang == "no":
         return "📋 Dokumentet mangler noen viktige opplysninger:\n\n" + questions + "\n\nSvar i én melding."
     return "📋 The document is missing a few important details:\n\n" + questions + "\n\nReply in one message."
 
+def document_has_placeholders(text: str) -> bool:
+    if not text:
+        return False
+    bad_patterns = [
+        r"\[[^\]]+\]",
+        r"Čia pateikite",
+        r"Jei yra priedų",
+        r"Vardas Pavardė",
+        r"El\. paštas",
+        r"Telefonas",
+        r"Adresas",
+        r"Data:\s*$",
+        r"Priedai:\s*\n\s*Nėra",
+    ]
+    return any(re.search(pat, text, flags=re.IGNORECASE | re.MULTILINE) for pat in bad_patterns)
+
+
+def placeholder_fix_message(lang: str) -> str:
+    if lang == "lt":
+        return (
+            "📋 Dokumentui parengti trūksta duomenų:\n\n"
+            "1. Vardas ir pavardė\n"
+            "2. Dokumentui svarbi data arba laikotarpis\n"
+            "3. El. paštas arba telefonas\n\n"
+            "Atsakykite viena žinute."
+        )
+    if lang == "no":
+        return (
+            "📋 Dokumentet mangler noen viktige opplysninger:\n\n"
+            "1. Navn og etternavn\n"
+            "2. Viktig dato eller tidsperiode\n"
+            "3. E-post eller telefon\n\n"
+            "Svar i én melding."
+        )
+    return (
+        "📋 The document is missing a few important details:\n\n"
+        "1. Full name\n"
+        "2. Relevant date or timeframe\n"
+        "3. Email or phone\n\n"
+        "Reply in one message."
+    )
 
 def generate_document_for_state(chat_id: int, state: dict, lang: str, doc_type: str):
     send_message(chat_id, TEXT[lang]["doc_thinking"])
@@ -776,6 +831,18 @@ def generate_document_for_state(chat_id: int, state: dict, lang: str, doc_type: 
     if not answer:
         err = "⚠️ Dokumento šiuo metu nepavyko paruošti. Bandykite dar kartą po kelių minučių." if lang == "lt" else "⚠️ The document could not be prepared right now. Please try again in a few minutes."
         send_message(chat_id, err)
+        return
+    if answer.strip().upper().startswith("NEED_MORE_DATA"):
+        details = answer.split(":", 1)[1].strip() if ":" in answer else ""
+        msg = missing_doc_message(lang, details if details else "1. Vardas ir pavardė\n2. Data arba laikotarpis\n3. El. paštas arba telefonas")
+        state["awaiting_doc_details"] = True
+        state["pending_doc_type"] = doc_type
+        send_message(chat_id, msg)
+        return
+    if document_has_placeholders(answer):
+        state["awaiting_doc_details"] = True
+        state["pending_doc_type"] = doc_type
+        send_message(chat_id, placeholder_fix_message(lang))
         return
     send_chunks(chat_id, answer)
 
