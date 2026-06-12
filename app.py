@@ -126,41 +126,31 @@ Jeg kan hjelpe med:
 SAFETY_TEXT = {
     "lt": """🔐 Saugumas ir konfidencialumas
 
-Naudojamos platformos:
+• Jūsų pateikta informacija naudojama tik bylos analizei ir dokumentų rengimui.
 
-🤖 OpenAI
-☁️ Supabase
-🌐 Render
-✈️ Telegram
+• Duomenys saugomi iki prenumeratos pabaigos.
 
-• Jūsų pateikta informacija ir duomenys bus saugomi iki prenumeratos pabaigos.
-• Pasibaigus prenumeratai, duomenys ištrinami.
+• Pasibaigus prenumeratai duomenys automatiškai ištrinami.
 
 ✅ Suprantu ir sutinku""",
+
     "en": """🔐 Security and confidentiality
 
-Platforms used:
+• Your information is used only for case analysis and document preparation.
 
-🤖 OpenAI
-☁️ Supabase
-🌐 Render
-✈️ Telegram
+• Data is stored until the subscription ends.
 
-• Your submitted information and data will be stored until the subscription ends.
-• After the subscription ends, the data is deleted.
+• After the subscription ends, the data is automatically deleted.
 
 ✅ I understand and agree""",
+
     "no": """🔐 Sikkerhet og konfidensialitet
 
-Plattformer som brukes:
+• Informasjonen brukes kun til saksanalyse og dokumentforberedelse.
 
-🤖 OpenAI
-☁️ Supabase
-🌐 Render
-✈️ Telegram
+• Data lagres til abonnementet avsluttes.
 
-• Informasjonen og dataene du sender inn lagres til abonnementet avsluttes.
-• Etter at abonnementet avsluttes, slettes dataene.
+• Etter at abonnementet avsluttes slettes dataene automatisk.
 
 ✅ Jeg forstår og godtar""",
 }
@@ -246,27 +236,14 @@ def detect_lang(user: dict) -> str:
 
 def language_for_country_selection(country: str, current_lang: str | None, tg_user: dict | None = None) -> str:
     """
-    Keep the interface language stable when the user chooses a legal jurisdiction.
-    Country controls the law; language controls the bot UI.
-    If the bot lost in-memory state after deploy/restart, choose a safe default:
-    Lithuania -> Lithuanian, Norway -> Lithuanian for Lithuanian users or Norwegian for Norwegian Telegram locale,
-    UK/Other -> current/Telegram language, otherwise English.
+    Country selection changes only the legal jurisdiction.
+    The bot interface language stays the same as the current/Telegram language.
     """
-    current_lang = current_lang if current_lang in ("lt", "no", "en") else None
-    tg_lang = detect_lang(tg_user or {})
-
-    if current_lang:
-        if country == "lt":
-            return "lt"
+    if current_lang in ("lt", "no", "en"):
         return current_lang
 
-    if country == "lt":
-        return "lt"
-    if country == "no":
-        return "no" if tg_lang == "no" else "lt"
-    if country == "uk":
-        return "en"
-    return tg_lang or "en"
+    tg_lang = detect_lang(tg_user or {})
+    return tg_lang if tg_lang in ("lt", "no", "en") else "en"
 
 
 def welcome_text(lang: str) -> str:
