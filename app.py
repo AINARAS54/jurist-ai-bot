@@ -74,6 +74,8 @@ Style:
 - Do not use greetings such as Dear Sir/Madam, Gerbiamasis, Gerbiamoji, Gerb. pone, Gerb. ponia.
 - Do not use the phrase [Paraiška pridedama].
 - In Lithuanian legal text, avoid the word "normaliai". Use "įprastai", "pagal paskirtį" or "įprastomis naudojimo sąlygomis".
+- Telegram answers must be concise. Avoid long reports unless the user explicitly requests a detailed report.
+- Do not repeat the same URL. If a Google Drive or other link is included, show it only once.
 
 Rules:
 - Do not claim to be a lawyer.
@@ -283,6 +285,8 @@ def get_state(chat_id: int) -> dict:
             "case_id": None,
             "case_number": None,
             "awaiting_followup": False,
+            "awaiting_doc_details": False,
+            "pending_doc_type": None,
         }
     return USER_STATES[chat_id]
 
@@ -501,28 +505,23 @@ def build_case_prompt(case_text: str, lang: str, country: str, full: bool):
             return f"""
 Atsakyk tik lietuviškai. Taikoma šalis / jurisdikcija: {country_name}.
 
-Paruošk išsamų bylos vertinimą:
+Paruošk trumpą pilną bylos vertinimą Telegram formatui.
 
-📁 Bylos numeris
-📋 Situacijos santrauka
-📌 Pagrindiniai faktai
+Naudok tik šiuos skyrius:
+
+🆔 Bylos numeris
+📋 Situacija
 ⚖️ Galimai taikytini teisės aktai
-Nurodyk įstatymų, direktyvų arba kodeksų pavadinimus ir straipsnių / paragrafų numerius, jei jie gali būti aktualūs.
-⚠️ Galimi pažeidimai
-📂 Reikalingi įrodymai
-📊 Bylos stiprumas 0-100
-🎯 Veiksmų planas
+🎯 Rekomenduojami veiksmai
 📄 Galimi dokumentai
-💳 Galimybė susigrąžinti pinigus per banką, jei aktualu
-✅ Išvada
 
-🧭 Klausimai bylai patikslinti
-Pateik ne daugiau kaip 2 svarbiausius klausimus. Jei klausimai nebūtini, šio skyriaus nerodyk.
-
-💡 Praktiniai pasiūlymai
-Pateik ne daugiau kaip 2 konkrečius pasiūlymus.
-
-Neteik kategoriško teiginio, kad nusikaltimas įvykdytas. Naudok: „galimai taikytina“, „gali būti aktualu“, „gali būti vertinama pagal“.
+Taisyklės:
+- Atsakymas turi tilpti į 8–15 eilučių.
+- Nekurk ilgos ataskaitos.
+- Nerodyk skyrių „Reikalingi įrodymai“, „Bylos stiprumas“, „Klausimai bylai patikslinti“ ir „Praktiniai pasiūlymai“, nebent vartotojas to aiškiai prašo.
+- Pinigų grąžinimo per banką skyrių rodyk tik jei byla tiesiogiai susijusi su kortelės ar bankiniu mokėjimu.
+- Nurodyk įstatymų, direktyvų arba kodeksų pavadinimus ir straipsnių / paragrafų numerius, jei jie gali būti aktualūs.
+- Neteik kategoriško teiginio, kad nusikaltimas įvykdytas. Naudok: „galimai taikytina“, „gali būti aktualu“, „gali būti vertinama pagal“.
 
 Bylos informacija:
 {case_text}
@@ -549,7 +548,7 @@ Situacija:
         return f"""
 Svar kun på norsk. Jurisdiksjon: {country_name}.
 
-Lag {'en full vurdering' if full else 'en kort førstevurdering'} med relevante lover og paragrafnumre når mulig. Ikke påstå at en straffbar handling definitivt har skjedd. Maks 2 spørsmål og 2 forslag.
+Lag {'en kort full vurdering' if full else 'en kort førstevurdering'} for Telegram. Bruk 8-15 linjer. Ta med relevante lover og paragrafnumre når mulig. Ikke påstå at en straffbar handling definitivt har skjedd. Ikke vis lange bevislister, saksstyrke, spørsmål eller forslag med mindre brukeren ber om det.
 
 Saksinformasjon:
 {case_text}
@@ -558,7 +557,7 @@ Saksinformasjon:
     return f"""
 Answer only in English. Jurisdiction: {country_name}.
 
-Prepare {'a full case review' if full else 'a short initial assessment'} with relevant law names and article/section numbers where possible. Do not state that a crime definitely occurred. Max 2 questions and 2 suggestions.
+Prepare {'a concise full case review' if full else 'a short initial assessment'} for Telegram in 8-15 lines. Include relevant law names and article/section numbers where possible. Do not state that a crime definitely occurred. Do not show long evidence lists, case strength, questions or suggestions unless the user asks for them.
 
 Case information:
 {case_text}
@@ -637,15 +636,20 @@ Svarbiausios taisyklės:
 - Jei PDF / bylos tekste yra vardas, pavardė, adresas, el. paštas, telefonas, data, suma, platforma, įmonė, bankas, pavedimų duomenys ar kiti faktai, įrašyk juos į dokumentą automatiškai.
 - Nenaudok tuščių laukų [Vardas Pavardė], [Adresas], [El. paštas], [Telefonas], [Data], jei duomenys jau randami byloje.
 - Jei konkretaus duomens nėra, jo eilutę praleisk. Neįterpk instrukcinių tekstų laužtiniuose skliaustuose.
+- Jeigu prieš dokumento generavimą vartotojas pateikė papildomus trūkstamus duomenis, naudok juos dokumente.
+- Dokumento adresatą nustatyk automatiškai pagal dokumento tipą, pasirinktą šalį ir bylos turinį. Neklausk „Kam adresuoti dokumentą?“, nebent byloje visiškai neaišku, ar dokumentas turi būti skirtas pardavėjui, bankui, policijai ar institucijai.
 - Nenaudok frazių: [Čia pateikite...], [Jei yra priedų...], [Paraiška pridedama].
 - Dokumentas turi būti pilnai užpildytas ir paruoštas siuntimui.
 - Dokumentą pradėk nuo tinkamo gavėjo pagal pasirinktą šalį ir dokumento antraštės.
 - Jei pasirinkta Norvegija, nenaudok Lietuvos institucijų, nebent byloje aiškiai nurodyta, kad ginčas nagrinėjamas Lietuvoje.
 - Jei pasirinkta Jungtinė Karalystė, nenaudok Lietuvos institucijų.
 - Nenaudok kreipinių: Gerbiamasis, Gerbiamoji, Gerb. pone, Gerb. ponia.
-- Dokumento viršuje gali įrašyti: „Sukūrė Justice AI“. Bylos numerio dokumente nerašyk, nebent jis būtinas vidinei nuorodai.
+- Dokumento viršuje įrašyk: „Sukūrė Justice AI“. Bylos numerio dokumente nerašyk, nebent jis būtinas vidinei nuorodai.
 - Įtrauk galimai taikytinus teisės aktus su straipsnių / paragrafų numeriais, bet neteik kategoriško teiginio, kad nusikaltimas įvykdytas.
+- Jei dokumente yra interneto nuoroda, rodyk ją tik vieną kartą. Nekartok tos pačios nuorodos skliaustuose ir nekartok jos keliose vietose.
+- Google Drive nuorodą pateik taip: „Google Drive: https://...“.
 - Jei yra aiškūs priedai pagal bylą, naudok skyrių „Priedai:“ ir išvardink tik realiai byloje minimus priedus. Jei priedų neįmanoma nustatyti, šio skyriaus nerodyk.
+- Jei nėra el. pašto, telefono ar adreso, nerodyk laukų [El. paštas], [Telefonas], [Adresas]. Trūkstamus laukus praleisk.
 - Nesiūlyk kreiptis į konsultantus ar teisininkus.
 
 Bylos informacija ir nuskaitytas dokumentų tekstas:
@@ -664,20 +668,116 @@ Rules:
 - If the case/PDF contains name, address, email, phone, dates, amounts, platform names, company names, bank/payment data or other facts, insert them directly.
 - Do not use empty placeholders if data exists.
 - If a data point is missing, omit that line instead of adding instructional bracket text.
+- If the user provided additional missing data before document generation, use it in the document.
+- Determine the document recipient automatically from the document type, selected jurisdiction and case content. Do not ask who the document should be addressed to unless it is completely unclear whether it should go to a seller, bank, police or authority.
 - Do not use instructional phrases like [insert details here].
 - The document must be complete and ready to send.
 - Start with the correct recipient for the selected jurisdiction and the document title.
 - If Norway is selected, do not use Lithuanian institutions unless the case explicitly concerns Lithuania.
 - If the UK is selected, do not use Lithuanian institutions.
 - Do not use Dear Sir/Madam or gendered salutations.
-- You may write "Prepared via Justice AI" at the top. Do not include the case number unless it is necessary as an internal reference.
+- Write "Created by Justice AI" at the top. Do not include the case number unless it is necessary as an internal reference.
 - Include relevant laws and section/article numbers, but do not state that a crime definitely occurred.
+- If a URL appears in the document, show it only once. Do not repeat the same URL in brackets or in multiple places.
+- Format Google Drive links as: "Google Drive: https://...".
 - If real attachments are identifiable from the case, include an Attachments section. Otherwise omit it.
+- Do not show missing placeholders such as [Email], [Phone], [Address] if the data is not present in the case.
 - Do not suggest external lawyers or advisors.
 
 Case information and extracted document text:
 {case_text}
 """
+
+
+def build_doc_missing_prompt(case_text: str, lang: str, country: str, doc_type: str) -> str:
+    country_name = COUNTRIES.get(country, COUNTRIES["lt"])[lang]
+    doc = document_name(doc_type, lang)
+    recipient_hint = jurisdiction_recipient_hint(country, doc_type, lang)
+
+    if lang == "lt":
+        return f"""
+Atsakyk tik lietuviškai. Taikoma šalis / jurisdikcija: {country_name}.
+
+Patikrink, ar pakanka duomenų pilnai užpildytam dokumentui: {doc}.
+Adresatą nustatyk automatiškai pagal šias gaires: {recipient_hint}
+
+Svarbu:
+- Neklausk „Kam adresuoti dokumentą?“, jei adresatą galima nustatyti iš dokumento tipo, jurisdikcijos ir bylos turinio.
+- Jei trūksta tik nebūtinų duomenų, atsakyk READY.
+- Klausimus užduok tik dėl tikrai svarbių duomenų, be kurių dokumentas būtų nepilnas arba netikslus.
+- Maksimaliai 3 klausimai.
+- Klausimai turi būti trumpi ir konkretūs.
+
+Atsakyk tik vienu iš šių formatų:
+READY
+
+arba:
+MISSING:
+1. ...
+2. ...
+3. ...
+
+Bylos informacija ir nuskaitytas dokumentų tekstas:
+{case_text}
+"""
+
+    return f"""
+Reply only in {lang_name(lang)}. Jurisdiction: {country_name}.
+
+Check whether there is enough information to generate a complete document: {doc}.
+Determine the recipient automatically using this guidance: {recipient_hint}
+
+Important:
+- Do not ask who the document should be addressed to if it can be determined from the document type, jurisdiction and case content.
+- If only non-essential data is missing, answer READY.
+- Ask only for essential missing data without which the document would be incomplete or inaccurate.
+- Maximum 3 questions.
+- Questions must be short and specific.
+
+Reply only in one of these formats:
+READY
+
+or:
+MISSING:
+1. ...
+2. ...
+3. ...
+
+Case information and extracted document text:
+{case_text}
+"""
+
+
+def parse_missing_doc_questions(answer: str) -> str:
+    text = (answer or "").strip()
+    if not text:
+        return ""
+    if text.upper().startswith("READY"):
+        return ""
+    if "MISSING:" in text.upper():
+        parts = re.split(r"MISSING:\s*", text, flags=re.IGNORECASE, maxsplit=1)
+        if len(parts) == 2:
+            return parts[1].strip()
+    return ""
+
+
+def missing_doc_message(lang: str, questions: str) -> str:
+    if lang == "lt":
+        return "📋 Dokumentui trūksta kelių svarbių duomenų:\n\n" + questions + "\n\nAtsakykite viena žinute."
+    if lang == "no":
+        return "📋 Dokumentet mangler noen viktige opplysninger:\n\n" + questions + "\n\nSvar i én melding."
+    return "📋 The document is missing a few important details:\n\n" + questions + "\n\nReply in one message."
+
+
+def generate_document_for_state(chat_id: int, state: dict, lang: str, doc_type: str):
+    send_message(chat_id, TEXT[lang]["doc_thinking"])
+    full_text = f"Bylos numeris: {state.get('case_number')}\n\n{state.get('case_text')}"
+    answer = openai_request(build_doc_prompt(full_text, lang, state.get("country") or "lt", doc_type), lang)
+    if not answer:
+        err = "⚠️ Dokumento šiuo metu nepavyko paruošti. Bandykite dar kartą po kelių minučių." if lang == "lt" else "⚠️ The document could not be prepared right now. Please try again in a few minutes."
+        send_message(chat_id, err)
+        return
+    send_chunks(chat_id, answer)
 
 
 def build_followup_prompt(case_text: str, question: str, lang: str, country: str):
@@ -708,7 +808,7 @@ Question:
 def show_start(chat_id: int, tg_user: dict):
     lang = detect_lang(tg_user)
     state = get_state(chat_id)
-    state.update({"lang": lang, "accepted": False, "country": None, "case_text": None, "case_id": None, "case_number": None, "awaiting_followup": False})
+    state.update({"lang": lang, "accepted": False, "country": None, "case_text": None, "case_id": None, "case_number": None, "awaiting_followup": False, "awaiting_doc_details": False, "pending_doc_type": None})
     db_user_upsert(tg_user, lang)
     start_text = f"{welcome_text(lang)}\n\n{SAFETY_TEXT[lang]}"
     send_message(chat_id, start_text, reply_markup=safety_menu(lang))
@@ -923,10 +1023,15 @@ def telegram_webhook():
                     send_message(chat_id, TEXT[lang]["no_case"])
                 else:
                     doc_type = data.replace("doc_", "")
-                    send_message(chat_id, TEXT[lang]["doc_thinking"])
                     full_text = f"Bylos numeris: {state.get('case_number')}\n\n{state.get('case_text')}"
-                    answer = openai_request(build_doc_prompt(full_text, lang, state.get("country") or "lt", doc_type), lang)
-                    send_chunks(chat_id, answer)
+                    check = openai_request(build_doc_missing_prompt(full_text, lang, state.get("country") or "lt", doc_type), lang)
+                    missing = parse_missing_doc_questions(check)
+                    if missing:
+                        state["awaiting_doc_details"] = True
+                        state["pending_doc_type"] = doc_type
+                        send_message(chat_id, missing_doc_message(lang, missing))
+                    else:
+                        generate_document_for_state(chat_id, state, lang, doc_type)
 
             return jsonify({"ok": True})
 
@@ -973,6 +1078,14 @@ def telegram_webhook():
                 show_start(chat_id, user)
             elif not state.get("country"):
                 show_country(chat_id)
+            elif state.get("awaiting_doc_details") and state.get("case_text"):
+                state["awaiting_doc_details"] = False
+                doc_type = state.get("pending_doc_type") or "authority_complaint"
+                state["pending_doc_type"] = None
+                state["case_text"] = (state.get("case_text") or "") + f"\n\n--- PAPILDOMI DUOMENYS DOKUMENTUI ---\n{text}"
+                if state.get("case_id"):
+                    db_update_case(state["case_id"], state["case_text"])
+                generate_document_for_state(chat_id, state, lang, doc_type)
             elif state.get("awaiting_followup") and state.get("case_text"):
                 state["awaiting_followup"] = False
                 send_message(chat_id, TEXT[lang]["thinking"])
