@@ -348,18 +348,15 @@ def after_full_menu(lang: str):
 def file_action_menu(lang: str):
     if lang == "lt":
         return {"inline_keyboard": [
-            [{"text": "📎 Įkelti dar dokumentų", "callback_data": "upload_more"}],
             [{"text": "📂 Bylos dokumentai", "callback_data": "case_docs"}],
             [{"text": "✅ Analizuoti bylą", "callback_data": "analyze_case"}],
         ]}
     if lang == "no":
         return {"inline_keyboard": [
-            [{"text": "📎 Last opp flere dokumenter", "callback_data": "upload_more"}],
             [{"text": "📂 Saksdokumenter", "callback_data": "case_docs"}],
             [{"text": "✅ Analyser saken", "callback_data": "analyze_case"}],
         ]}
     return {"inline_keyboard": [
-        [{"text": "📎 Upload more documents", "callback_data": "upload_more"}],
         [{"text": "📂 Case documents", "callback_data": "case_docs"}],
         [{"text": "✅ Analyze case", "callback_data": "analyze_case"}],
     ]}
@@ -564,6 +561,7 @@ Naudok tik šiuos skyrius:
 
 Taisyklės:
 - Atsakymas turi tilpti į 8–15 eilučių.
+- Tarp kiekvienos temos palik tuščią eilutę. Formatą daryk su aiškiais tarpais tarp pastraipų.
 - Nekurk ilgos ataskaitos.
 - Nerodyk skyrių „Reikalingi įrodymai“, „Bylos stiprumas“, „Klausimai bylai patikslinti“ ir „Praktiniai pasiūlymai“, nebent vartotojas to aiškiai prašo.
 - Pinigų grąžinimo per banką skyrių rodyk tik jei byla tiesiogiai susijusi su kortelės ar bankiniu mokėjimu.
@@ -596,7 +594,7 @@ Situacija:
         return f"""
 Svar kun på norsk. Jurisdiksjon: {country_name}.
 
-Lag {'en kort full vurdering' if full else 'en kort førstevurdering'} for Telegram. Bruk 8-15 linjer. Ta med relevante lover og paragrafnumre når mulig. Ikke påstå at en straffbar handling definitivt har skjedd. Ikke vis lange bevislister, saksstyrke, spørsmål eller forslag med mindre brukeren ber om det.
+Lag {'en kort full vurdering' if full else 'en kort førstevurdering'} for Telegram. Bruk 8-15 linjer. Bruk blank linje mellom hver seksjon. Ta med relevante lover og paragrafnumre når mulig. Ikke påstå at en straffbar handling definitivt har skjedd. Ikke vis lange bevislister, saksstyrke, spørsmål eller forslag med mindre brukeren ber om det.
 
 Saksinformasjon:
 {case_text}
@@ -605,7 +603,7 @@ Saksinformasjon:
     return f"""
 Answer only in English. Jurisdiction: {country_name}.
 
-Prepare {'a concise full case review' if full else 'a short initial assessment'} for Telegram in 8-15 lines. Include relevant law names and article/section numbers where possible. Do not state that a crime definitely occurred. Do not show long evidence lists, case strength, questions or suggestions unless the user asks for them.
+Prepare {'a concise full case review' if full else 'a short initial assessment'} for Telegram in 8-15 lines. Use a blank line between each section. Include relevant law names and article/section numbers where possible. Do not state that a crime definitely occurred. Do not show long evidence lists, case strength, questions or suggestions unless the user asks for them.
 
 Case information:
 {case_text}
@@ -782,7 +780,8 @@ Svarbu:
 - Pirmiausia pats nustatyk adresatą iš bylos konteksto, dokumento tipo ir pasirinktos šalies.
 - Neklausk „Kam adresuoti dokumentą?“, jei galima suprasti, ar dokumentas skirtas pardavėjui, bankui, policijai ar institucijai.
 - Jei byla susijusi su policijos sprendimu, skundo eiga, neatsakytu el. laišku ar tyrimo nutraukimu, adresatas yra policijos institucija, ne vartotojų teisių institucija.
-- Dokumento tikslą, prašymo esmę, datą, terminą ir adresatą pirmiausia nustatyk iš bylos ir PDF dokumentų. Neklausk apie juos, jei tai galima suprasti iš konteksto.
+- Dokumento tikslą ir prašymo esmę nustatyk iš pasirinkto dokumento tipo, bylos ir PDF dokumentų. Neklausk apie prašymo tikslą, jei dokumento tipas jau pasirinktas.
+- Datą, terminą ir adresatą pirmiausia nustatyk iš bylos ir PDF dokumentų. Jei data nėra aiški, naudok šiandienos datą ir neklausk datos, nebent dokumentui būtina konkreti oficialaus sprendimo gavimo data.
 - Kontaktinis telefonas nėra būtinas, jei jo nėra byloje; jo neklausk, nebent dokumento tipui jis kritiškai būtinas.
 - Jei trūksta tik nebūtinų duomenų, atsakyk READY.
 - Klausimą užduok tik tada, kai trūksta pareiškėjo vardo / pavardės arba visiškai neįmanoma nustatyti oficialaus prašymo tikslo iš bylos.
@@ -814,7 +813,8 @@ Important:
 - First determine the recipient from case context, document type and selected jurisdiction.
 - Do not ask who the document should be addressed to if it can be determined whether it goes to a seller, bank, police or authority.
 - If the case concerns police decision, complaint progress, unanswered email or discontinued investigation, the recipient is a police authority, not a consumer authority.
-- First infer document purpose, request, date/timeframe and recipient from the case and PDF documents. Do not ask about them if they can be understood from context.
+- First infer document purpose and request from the selected document type, case and PDF documents. Do not ask about the request purpose if the document type has already been selected.
+- First infer date/timeframe and recipient from the case and PDF documents. If the date is unclear, use today's date and do not ask for a date unless the exact official decision receipt date is critical.
 - A phone number is not mandatory; do not ask for it unless it is critical for the document type.
 - If only non-essential data is missing, answer READY.
 - Ask only if the claimant full name is missing or if the official request purpose is impossible to determine from the case.
@@ -848,6 +848,30 @@ def parse_missing_doc_questions(answer: str) -> str:
         if len(parts) == 2:
             return parts[1].strip()
     return ""
+
+
+def has_claimant_name(case_text: str) -> bool:
+    text = case_text or ""
+    known_patterns = [
+        r"\bAinaras\s+Kalnenas\b",
+        r"\bAinaras\s+KALNENAS\b",
+    ]
+    if any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in known_patterns):
+        return True
+    # General fallback: a likely personal name near applicant wording.
+    return bool(re.search(r"(?i)(pareiškėjas|claimant|klager|søker|gyvenantis)[:\s,]+[A-ZĄČĘĖĮŠŲŪŽ][\wĄČĘĖĮŠŲŪŽąčęėįšųūž-]+\s+[A-ZĄČĘĖĮŠŲŪŽ][\wĄČĘĖĮŠŲŪŽąčęėįšųūž-]+", text))
+
+
+def should_skip_doc_readiness(case_text: str, doc_type: str) -> bool:
+    text = (case_text or "").lower()
+    if doc_type in ("appeal_police_decision", "fraud_report"):
+        police_or_fraud_context = any(k in text for k in [
+            "policija", "politiet", "politi", "henlegg", "nutrauk", "sprendim",
+            "sukči", "fraud", "svindel", "bylos numeris", "saksnr"
+        ])
+        if police_or_fraud_context and has_claimant_name(case_text):
+            return True
+    return False
 
 
 def missing_doc_message(lang: str, questions: str) -> str:
@@ -1092,7 +1116,7 @@ def handle_file(chat_id: int, msg: dict):
         if not extracted:
             status_text += "\n\n⚠️ Dokumentas pridėtas, bet teksto nuskaityti nepavyko. Trumpai aprašykite svarbiausią informaciją viena žinute."
         else:
-            status_text += "\n\n✅ Galite įkelti daugiau dokumentų arba pradėti bendrą bylos analizę."
+            status_text += "\n\n✅ Pasirinkite tolesnį veiksmą."
     elif lang == "no":
         if created_now:
             status_text = (
@@ -1105,7 +1129,7 @@ def handle_file(chat_id: int, msg: dict):
         if not extracted:
             status_text += "\n\n⚠️ Tekst kunne ikke leses. Hvis dokumentet inneholder viktig informasjon, beskriv det kort i én melding."
         else:
-            status_text += "\n\n✅ Du kan laste opp flere dokumenter eller starte samlet analyse."
+            status_text += "\n\n✅ Velg neste handling."
     else:
         if created_now:
             status_text = (
@@ -1118,7 +1142,7 @@ def handle_file(chat_id: int, msg: dict):
         if not extracted:
             status_text += "\n\n⚠️ Text could not be extracted. If the document contains important information, briefly describe it in one message."
         else:
-            status_text += "\n\n✅ You can upload more documents or start the combined case analysis."
+            status_text += "\n\n✅ Choose the next action."
 
     if media_group_id and state.get("upload_menu_sent"):
         # Telegram sends each file in an album as a separate webhook update.
@@ -1208,11 +1232,11 @@ def telegram_webhook():
 
             elif data == "upload_more":
                 if lang == "lt":
-                    send_message(chat_id, "📎 Įkelkite kitą dokumentą arba paspauskite „✅ Analizuoti bylą“.", reply_markup=file_action_menu(lang))
+                    send_message(chat_id, "Pasirinkite tolesnį veiksmą.", reply_markup=file_action_menu(lang))
                 elif lang == "no":
-                    send_message(chat_id, "📎 Last opp et annet dokument eller trykk «✅ Analyser saken».", reply_markup=file_action_menu(lang))
+                    send_message(chat_id, "Velg neste handling.", reply_markup=file_action_menu(lang))
                 else:
-                    send_message(chat_id, "📎 Upload another document or press “✅ Analyze case”.", reply_markup=file_action_menu(lang))
+                    send_message(chat_id, "Choose the next action.", reply_markup=file_action_menu(lang))
 
             elif data == "case_docs":
                 files = state.get("files") or []
@@ -1253,14 +1277,17 @@ def telegram_webhook():
                 else:
                     doc_type = data.replace("doc_", "")
                     full_text = state.get('case_text') or ""
-                    check = openai_request(build_doc_missing_prompt(full_text, lang, state.get("country") or "lt", doc_type), lang)
-                    missing = parse_missing_doc_questions(check)
-                    if missing:
-                        state["awaiting_doc_details"] = True
-                        state["pending_doc_type"] = doc_type
-                        send_message(chat_id, missing_doc_message(lang, missing))
-                    else:
+                    if should_skip_doc_readiness(full_text, doc_type):
                         generate_document_for_state(chat_id, state, lang, doc_type)
+                    else:
+                        check = openai_request(build_doc_missing_prompt(full_text, lang, state.get("country") or "lt", doc_type), lang)
+                        missing = parse_missing_doc_questions(check)
+                        if missing:
+                            state["awaiting_doc_details"] = True
+                            state["pending_doc_type"] = doc_type
+                            send_message(chat_id, missing_doc_message(lang, missing))
+                        else:
+                            generate_document_for_state(chat_id, state, lang, doc_type)
 
             return jsonify({"ok": True})
 
@@ -1311,9 +1338,8 @@ def telegram_webhook():
                 state["awaiting_doc_details"] = False
                 doc_type = state.get("pending_doc_type") or "authority_complaint"
                 state["pending_doc_type"] = None
-                state["case_text"] = (state.get("case_text") or "") + f"\n\n--- PAPILDOMI DUOMENYS DOKUMENTUI ---\n{text}"
-                if state.get("case_id"):
-                    db_update_case(state["case_id"], state["case_text"])
+                existing_extra = state.get("doc_extra_data") or ""
+                state["doc_extra_data"] = (existing_extra + "\n" + text).strip()
                 generate_document_for_state(chat_id, state, lang, doc_type)
             elif state.get("awaiting_followup") and state.get("case_text"):
                 state["awaiting_followup"] = False
@@ -1325,11 +1351,11 @@ def telegram_webhook():
                     state["case_text"] = (state.get("case_text") or "") + f"\n\n--- PAPILDOMA VARTOTOJO INFORMACIJA ---\n{text}"
                     db_update_case(state["case_id"], state["case_text"])
                     if lang == "lt":
-                        send_message(chat_id, "✅ Informacija pridėta prie bylos.\n\nGalite įkelti daugiau dokumentų arba pradėti bendrą bylos analizę.", reply_markup=file_action_menu(lang))
+                        send_message(chat_id, "✅ Informacija pridėta prie bylos.\n\nPasirinkite tolesnį veiksmą.", reply_markup=file_action_menu(lang))
                     elif lang == "no":
-                        send_message(chat_id, "✅ Informasjonen er lagt til saken.\n\nDu kan laste opp flere dokumenter eller starte samlet analyse.", reply_markup=file_action_menu(lang))
+                        send_message(chat_id, "✅ Informasjonen er lagt til saken.\n\nVelg neste handling.", reply_markup=file_action_menu(lang))
                     else:
-                        send_message(chat_id, "✅ Information added to the case.\n\nYou can upload more documents or start the combined case analysis.", reply_markup=file_action_menu(lang))
+                        send_message(chat_id, "✅ Information added to the case.\n\nChoose the next action.", reply_markup=file_action_menu(lang))
                 else:
                     create_case_from_text(chat_id, text)
 
