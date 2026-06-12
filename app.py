@@ -770,7 +770,7 @@ Svarbu:
 - Dokumento tikslą, prašymo esmę, datą, terminą ir adresatą pirmiausia nustatyk iš bylos ir PDF dokumentų. Neklausk apie juos, jei tai galima suprasti iš konteksto.
 - Kontaktinis telefonas nėra būtinas, jei jo nėra byloje; jo neklausk, nebent dokumento tipui jis kritiškai būtinas.
 - Jei trūksta tik nebūtinų duomenų, atsakyk READY.
-- Klausimą užduok tik tada, kai trūksta pareiškėjo vardo / pavardės IR šio vardo negalima rasti byloje, arba visiškai neįmanoma nustatyti oficialaus prašymo tikslo iš bylos. Jei dokumento tipas jau pasirinktas, prašymo tikslas laikomas žinomu.
+- Klausimą užduok tik tada, kai trūksta pareiškėjo vardo / pavardės arba visiškai neįmanoma nustatyti oficialaus prašymo tikslo iš bylos.
 - Klausimus užduok tik dėl tikrai svarbių duomenų, be kurių dokumentas būtų nepilnas arba netikslus.
 - Maksimaliai 3 klausimai.
 - Klausimai turi būti trumpi ir konkretūs.
@@ -802,7 +802,7 @@ Important:
 - First infer document purpose, request, date/timeframe and recipient from the case and PDF documents. Do not ask about them if they can be understood from context.
 - A phone number is not mandatory; do not ask for it unless it is critical for the document type.
 - If only non-essential data is missing, answer READY.
-- Ask only if the claimant full name is missing and cannot be found anywhere in the case, or if the official request purpose is impossible to determine from the case. If the document type is already selected, treat the request purpose as known.
+- Ask only if the claimant full name is missing or if the official request purpose is impossible to determine from the case.
 - Ask only for essential missing data without which the document would be incomplete or inaccurate.
 - Maximum 3 questions.
 - Questions must be short and specific.
@@ -1100,20 +1100,16 @@ def handle_file(chat_id: int, msg: dict):
         send_message(chat_id, status_text, reply_markup=file_action_menu(lang))
         state["upload_menu_sent"] = True
     else:
-        if lang == "lt":
-            short_text = "📎 Dokumentas pridėtas prie bylos."
-            if not extracted:
-                short_text += "\n\n⚠️ Teksto nuskaityti nepavyko. Trumpai aprašykite svarbiausią informaciją viena žinute."
-        elif lang == "no":
-            short_text = "📎 Dokumentet er lagt til saken."
-            if not extracted:
-                short_text += "\n\n⚠️ Tekst kunne ikke leses. Beskriv det viktigste i én melding."
-        else:
-            short_text = "📎 Document added to the case."
-            if not extracted:
-                short_text += "\n\n⚠️ Text could not be extracted. Briefly describe the most important information in one message."
-
-        send_message(chat_id, short_text)
+        # Subsequent files are added silently unless text extraction failed.
+        # This prevents repeating the same action menu for every uploaded document.
+        if not extracted:
+            if lang == "lt":
+                short_text = "⚠️ Dokumentas pridėtas, bet teksto nuskaityti nepavyko. Trumpai aprašykite svarbiausią informaciją viena žinute."
+            elif lang == "no":
+                short_text = "⚠️ Dokumentet er lagt til saken, men teksten kunne ikke leses. Beskriv det viktigste i én melding."
+            else:
+                short_text = "⚠️ Document added, but text could not be extracted. Briefly describe the most important information in one message."
+            send_message(chat_id, short_text)
 
 
 @app.route("/", methods=["GET"])
@@ -1229,9 +1225,6 @@ def telegram_webhook():
                 else:
                     doc_type = data.replace("doc_", "")
                     full_text = state.get('case_text') or ""
-                    if doc_type == "appeal_police_decision":
-                        generate_document_for_state(chat_id, state, lang, doc_type)
-                        return jsonify({"ok": True})
                     check = openai_request(build_doc_missing_prompt(full_text, lang, state.get("country") or "lt", doc_type), lang)
                     missing = parse_missing_doc_questions(check)
                     if missing:
