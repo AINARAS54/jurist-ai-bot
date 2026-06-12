@@ -37,6 +37,7 @@ if not SUPABASE_SERVICE_ROLE_KEY:
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 USER_STATES = {}
+MEDIA_GROUPS = {}
 
 PLANS = {
     "1m": {"months": 1, "stars": 100, "lt": "1 mėnuo", "en": "1 month", "no": "1 måned"},
@@ -83,6 +84,7 @@ Rules:
 - Provide practical next steps yourself.
 - Mention institutions only as concrete action targets.
 - Separate facts from assumptions.
+- Never copy recipient/authority contact details into claimant/sender signature.
 """
 
 WELCOME_TEXT_LT = """⚖️ JUSTICE AI
@@ -179,7 +181,7 @@ TEXT = {
         "ask_question": "❓ Užduoti klausimą",
         "generate_doc": "📄 Generuoti dokumentą",
         "ask_prompt": "❓ Parašykite papildomą klausimą dėl šios bylos.",
-        "choose_doc": "📄 Pasirinkite, kokį dokumentą norite sugeneruoti:",
+        "choose_doc": "📄 Pasirinkite generuoti:",
         "no_case": "Pirmiausia aprašykite situaciją arba įkelkite dokumentą.",
         "doc_thinking": "⏳ Ruošiu dokumentą...",
         "file_received": "📎 Failas gautas. Apdoroju dokumentą...",
@@ -201,7 +203,7 @@ TEXT = {
         "ask_question": "❓ Ask a question",
         "generate_doc": "📄 Generate document",
         "ask_prompt": "❓ Write your follow-up question about this case.",
-        "choose_doc": "📄 Choose which document you want to generate:",
+        "choose_doc": "📄 Select to generate:",
         "no_case": "Please describe the situation or upload a document first.",
         "doc_thinking": "⏳ Preparing document...",
         "file_received": "📎 File received. Processing the document...",
@@ -223,7 +225,7 @@ TEXT = {
         "ask_question": "❓ Still spørsmål",
         "generate_doc": "📄 Generer dokument",
         "ask_prompt": "❓ Skriv oppfølgingsspørsmålet ditt om denne saken.",
-        "choose_doc": "📄 Velg hvilket dokument du vil generere:",
+        "choose_doc": "📄 Velg å generere:",
         "no_case": "Beskriv situasjonen eller last opp et dokument først.",
         "doc_thinking": "⏳ Forbereder dokument...",
         "file_received": "📎 Fil mottatt. Behandler dokumentet...",
@@ -287,6 +289,7 @@ def get_state(chat_id: int) -> dict:
             "awaiting_followup": False,
             "awaiting_doc_details": False,
             "pending_doc_type": None,
+            "doc_extra_data": "",
             "files": [],
             "upload_menu_sent": False,
         }
@@ -709,6 +712,12 @@ Svarbiausios taisyklės:
 - Jei yra aiškūs priedai pagal bylą, naudok skyrių „Priedai:“ ir išvardink tik realiai byloje minimus priedus. Jei priedų neįmanoma nustatyti, šio skyriaus nerodyk.
 - Jei nėra el. pašto, telefono ar adreso, nerodyk laukų [El. paštas], [Telefonas], [Adresas]. Trūkstamus laukus praleisk.
 - Nesiūlyk kreiptis į konsultantus ar teisininkus.
+- Griežtai atskirk adresato / institucijos kontaktus nuo pareiškėjo kontaktų.
+- Niekada nenaudok institucijos telefono ar el. pašto kaip pareiškėjo telefono ar el. pašto.
+- Jei el. paštas baigiasi @politiet.no, @police.uk, @gov.uk, @vvtat.lt ar priklauso institucijai, nelaikyk jo pareiškėjo el. paštu.
+- Jei telefono numeris randamas šalia policijos, banko ar institucijos pavadinimo, nelaikyk jo pareiškėjo telefonu.
+- Pareiškėjo paraše rodyk tik tuos kontaktus, kurie aiškiai priklauso pareiškėjui. Jei abejoji, telefono ir el. pašto nerodyk.
+- Vardą ir pavardę formatuok natūraliai: „Ainaras Kalnenas“, ne „Ainaras KALNENAS“.
 
 Bylos informacija ir nuskaitytas dokumentų tekstas:
 {case_text}
@@ -745,6 +754,12 @@ Rules:
 - If real attachments are identifiable from the case, include an Attachments section. Otherwise omit it.
 - Do not show missing placeholders such as [Email], [Phone], [Address] if the data is not present in the case.
 - Do not suggest external lawyers or advisors.
+- Strictly separate recipient/authority contact details from claimant contact details.
+- Never use an authority phone number or email address as the claimant's phone number or email address.
+- If an email ends with @politiet.no, @police.uk, @gov.uk, @vvtat.lt or clearly belongs to an institution, do not treat it as the claimant's email.
+- If a phone number appears near a police, bank or authority name, do not treat it as the claimant's phone number.
+- In the claimant signature, include only contact details that clearly belong to the claimant. If unsure, omit phone and email.
+- Format claimant names naturally, for example “Ainaras Kalnenas”, not “Ainaras KALNENAS”.
 
 Case information and extracted document text:
 {case_text}
@@ -883,7 +898,9 @@ def placeholder_fix_message(lang: str) -> str:
 
 def generate_document_for_state(chat_id: int, state: dict, lang: str, doc_type: str):
     send_message(chat_id, TEXT[lang]["doc_thinking"])
-    full_text = state.get('case_text') or ""
+    full_text = (state.get("case_text") or "")
+    if state.get("doc_extra_data"):
+        full_text += "\n\n--- PAPILDOMI DUOMENYS DOKUMENTUI / ADDITIONAL DOCUMENT DETAILS ---\n" + state.get("doc_extra_data", "")
     answer = openai_request(build_doc_prompt(full_text, lang, state.get("country") or "lt", doc_type), lang)
     if not answer:
         err = "⚠️ Dokumento šiuo metu nepavyko paruošti. Bandykite dar kartą po kelių minučių." if lang == "lt" else "⚠️ The document could not be prepared right now. Please try again in a few minutes."
@@ -942,6 +959,7 @@ def show_start(chat_id: int, tg_user: dict):
         "awaiting_followup": False,
         "awaiting_doc_details": False,
         "pending_doc_type": None,
+        "doc_extra_data": "",
         "files": [],
         "upload_menu_sent": False,
     })
@@ -969,6 +987,7 @@ def create_case_from_text(chat_id: int, user_text: str):
         "case_id": case_id,
         "case_number": case_number,
         "awaiting_followup": False,
+        "doc_extra_data": "",
         "files": [],
         "upload_menu_sent": False,
     })
@@ -999,6 +1018,10 @@ def create_case_from_text(chat_id: int, user_text: str):
 def handle_file(chat_id: int, msg: dict):
     state = get_state(chat_id)
     lang = state["lang"]
+    media_group_id = msg.get("media_group_id")
+    if media_group_id:
+        MEDIA_GROUPS.setdefault(media_group_id, {"chat_id": chat_id, "count": 0})
+        MEDIA_GROUPS[media_group_id]["count"] += 1
 
     file_id = None
     file_name = "uploaded_file"
@@ -1038,6 +1061,7 @@ def handle_file(chat_id: int, msg: dict):
             "case_id": case_id,
             "case_number": case_number,
             "case_text": base,
+            "doc_extra_data": "",
             "files": [],
             "upload_menu_sent": False,
         })
@@ -1096,12 +1120,16 @@ def handle_file(chat_id: int, msg: dict):
         else:
             status_text += "\n\n✅ You can upload more documents or start the combined case analysis."
 
+    if media_group_id and state.get("upload_menu_sent"):
+        # Telegram sends each file in an album as a separate webhook update.
+        # After the first album/file message, keep later album files silent to avoid repeated messages.
+        return
+
     if not state.get("upload_menu_sent"):
         send_message(chat_id, status_text, reply_markup=file_action_menu(lang))
         state["upload_menu_sent"] = True
     else:
-        # Subsequent files are added silently unless text extraction failed.
-        # This prevents repeating the same action menu for every uploaded document.
+        # Subsequent single-file uploads are added silently unless text extraction failed.
         if not extracted:
             if lang == "lt":
                 short_text = "⚠️ Dokumentas pridėtas, bet teksto nuskaityti nepavyko. Trumpai aprašykite svarbiausią informaciją viena žinute."
