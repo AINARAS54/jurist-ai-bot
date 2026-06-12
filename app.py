@@ -1081,13 +1081,24 @@ def handle_file(chat_id: int, msg: dict):
         else:
             status_text += "\n\n✅ You can upload more documents or start the combined case analysis."
 
-    if not state.get("upload_menu_sent"):     send_message(chat_id, status_text, reply_markup=file_action_menu(lang))     state["upload_menu_sent"] = True else:     if lang == "lt":         short_text = "📎 Dokumentas pridėtas prie bylos."         if not extracted:             short_text += "
+if not state.get("upload_menu_sent"):
+    send_message(chat_id, status_text, reply_markup=file_action_menu(lang))
+    state["upload_menu_sent"] = True
+else:
+    if lang == "lt":
+        short_text = "📎 Dokumentas pridėtas prie bylos."
+        if not extracted:
+            short_text += "\n\n⚠️ Teksto nuskaityti nepavyko. Trumpai aprašykite svarbiausią informaciją viena žinute."
+    elif lang == "no":
+        short_text = "📎 Dokumentet er lagt til saken."
+        if not extracted:
+            short_text += "\n\n⚠️ Tekst kunne ikke leses. Beskriv det viktigste i én melding."
+    else:
+        short_text = "📎 Document added to the case."
+        if not extracted:
+            short_text += "\n\n⚠️ Text could not be extracted. Briefly describe the most important information in one message."
 
-⚠️ Teksto nuskaityti nepavyko. Trumpai aprašykite svarbiausią informaciją viena žinute."     elif lang == "no":         short_text = "📎 Dokumentet er lagt til saken."         if not extracted:             short_text += "
-
-⚠️ Tekst kunne ikke leses. Beskriv det viktigste i én melding."     else:         short_text = "📎 Document added to the case."         if not extracted:             short_text += "
-
-⚠️ Text could not be extracted. Briefly describe the most important information in one message."      send_message(chat_id, short_text)
+    send_message(chat_id, short_text)
 
 
 @app.route("/", methods=["GET"])
