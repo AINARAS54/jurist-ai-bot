@@ -390,34 +390,56 @@ def doc_label(doc_type: str, lang: str, country: str | None = None) -> str:
             "bank_refund": "💳 Prašymas bankui dėl pinigų grąžinimo",
             "authority_complaint": "⚖️ Skundas institucijai",
             "fraud_report": "🚨 Pareiškimas dėl galimo sukčiavimo",
+            "appeal_police_decision": "⚖️ Skundas dėl tyrimo nutraukimo / neveikimo",
         },
         "no": {
             "seller_claim": "📄 Klagebrev til selger",
             "bank_refund": "💳 Forespørsel til bank",
             "authority_complaint": "⚖️ Klage til myndighet",
             "fraud_report": "🚨 Svindelrapport",
+            "appeal_police_decision": "⚖️ Klage på henleggelse / manglende svar",
         },
         "en": {
             "seller_claim": "📄 Seller complaint letter",
             "bank_refund": "💳 Bank refund request",
             "authority_complaint": "⚖️ Authority complaint",
             "fraud_report": "🚨 Fraud report",
+            "appeal_police_decision": "⚖️ Appeal against case closure / no response",
         },
     }
     return labels.get(lang, labels["en"]).get(doc_type, doc_type)
 
 
 def relevant_doc_types(case_text: str, country: str | None = None) -> list[str]:
+    text = (case_text or "").lower()
     case_type = detect_case_type(case_text)
-    if case_type == "fraud":
-        return ["fraud_report", "bank_refund"]
+
+    police_context = any(k in text for k in [
+        "policija", "politiet", "politi", "pareiškim", "pareiskim", "skund",
+        "nutrauk", "henlegg", "atmet", "neatsak", "atsakymo negav", "bylos eiga"
+    ])
+    bank_context = any(k in text for k in [
+        "bank", "kortel", "visa", "mastercard", "mokėj", "mokej", "paved",
+        "chargeback", "lėšų", "lesu", "binance", "spectrocoin", "usdc", "crypto", "kript"
+    ])
+
+    if case_type == "fraud" or police_context:
+        docs = []
+        if police_context:
+            docs.append("appeal_police_decision")
+        else:
+            docs.append("fraud_report")
+        if bank_context:
+            docs.append("bank_refund")
+        return docs
+
     if case_type == "bank":
         return ["bank_refund", "authority_complaint"]
     if case_type == "seller":
         return ["seller_claim", "bank_refund", "authority_complaint"]
     if case_type == "service":
         return ["seller_claim", "authority_complaint"]
-    return ["authority_complaint", "seller_claim"]
+    return ["authority_complaint"]
 
 
 def doc_menu(lang: str, case_text: str = "", country: str | None = None):
@@ -541,6 +563,7 @@ Taisyklės:
 - Nekurk ilgos ataskaitos.
 - Nerodyk skyrių „Reikalingi įrodymai“, „Bylos stiprumas“, „Klausimai bylai patikslinti“ ir „Praktiniai pasiūlymai“, nebent vartotojas to aiškiai prašo.
 - Pinigų grąžinimo per banką skyrių rodyk tik jei byla tiesiogiai susijusi su kortelės ar bankiniu mokėjimu.
+- Jei byla apie policijos sprendimą, tyrimo nutraukimą, neatsakytą skundą ar bylos eigą, rekomenduok veiksmus policijos / prokuratūros procese, o ne vartotojų instituciją.
 - Nurodyk įstatymų, direktyvų arba kodeksų pavadinimus ir straipsnių / paragrafų numerius, jei jie gali būti aktualūs.
 - Neteik kategoriško teiginio, kad nusikaltimas įvykdytas. Naudok: „galimai taikytina“, „gali būti aktualu“, „gali būti vertinama pagal“.
 
@@ -592,18 +615,21 @@ def document_name(doc_type: str, lang: str) -> str:
             "bank_refund": "prašymą bankui dėl pinigų grąžinimo",
             "authority_complaint": "skundą institucijai",
             "fraud_report": "pareiškimą dėl galimo sukčiavimo",
+            "appeal_police_decision": "skundą dėl tyrimo nutraukimo arba institucijos neveikimo",
         },
         "en": {
             "seller_claim": "seller complaint letter",
             "bank_refund": "bank refund request",
             "authority_complaint": "consumer authority complaint",
             "fraud_report": "fraud report",
+            "appeal_police_decision": "appeal against case closure or authority inaction",
         },
         "no": {
             "seller_claim": "klagebrev til selger",
             "bank_refund": "forespørsel til bank om tilbakebetaling",
             "authority_complaint": "klage til myndighet",
             "fraud_report": "svindelrapport",
+            "appeal_police_decision": "klage på henleggelse eller manglende svar fra myndighet",
         },
     }
     return names.get(lang, names["en"]).get(doc_type, "document")
@@ -611,6 +637,8 @@ def document_name(doc_type: str, lang: str) -> str:
 
 def jurisdiction_recipient_hint(country: str, doc_type: str, lang: str) -> str:
     if country == "no":
+        if doc_type == "appeal_police_decision":
+            return "Norvegijos policija / Politiet arba aukštesnė policijos institucija pagal bylos dokumentus. Nenaudok Forbrukertilsynet, jei byla apie policijos sprendimą ar neatsakytą skundą."
         if doc_type == "fraud_report":
             return "Norvegijos policija / Politiet. Jei dokumentas skirtas vartotojų ginčui, naudok Forbrukertilsynet."
         if doc_type == "authority_complaint":
@@ -619,6 +647,8 @@ def jurisdiction_recipient_hint(country: str, doc_type: str, lang: str) -> str:
             return "Kliento bankas Norvegijoje arba mokėjimo kortelės išdavėjas."
         return "Pardavėjas arba paslaugos teikėjas Norvegijoje."
     if country == "uk":
+        if doc_type == "appeal_police_decision":
+            return "UK Police / relevant police force complaints department, jei byla apie policijos sprendimą arba neatsakytą skundą."
         if doc_type == "fraud_report":
             return "Action Fraud / UK Police, jei yra sukčiavimo požymių."
         if doc_type == "authority_complaint":
@@ -629,6 +659,8 @@ def jurisdiction_recipient_hint(country: str, doc_type: str, lang: str) -> str:
     if country == "other":
         return "Parink instituciją pagal byloje nurodytą šalį. Jei šalies nėra, dokumente nenaudok konkrečios institucijos pavadinimo."
     # Lithuania default
+    if doc_type == "appeal_police_decision":
+        return "Policija / aukštesnė policijos institucija arba prokuratūra, jei byla apie nutrauktą tyrimą ar neatsakytą skundą."
     if doc_type == "fraud_report":
         return "Policija / ePolicija, jei yra galimo sukčiavimo požymių."
     if doc_type == "authority_complaint":
@@ -661,13 +693,15 @@ Svarbiausios taisyklės:
 - Dokumento adresatą nustatyk automatiškai pagal dokumento tipą, pasirinktą šalį ir bylos turinį. Neklausk „Kam adresuoti dokumentą?“, nebent byloje visiškai neaišku, ar dokumentas turi būti skirtas pardavėjui, bankui, policijai ar institucijai.
 - Jei byla susijusi su policijos atsakymu, nutrauktu tyrimu, skundu dėl bylos eigos ar neatsakytu el. laišku, adresatą rinkis policijos instituciją, o ne vartotojų teisių instituciją.
 - Nenaudok frazių: [Čia pateikite...], [Jei yra priedų...], [Paraiška pridedama].
-- Niekada nepalik tuščių laukų ar laužtinių skliaustų dokumente. Jei privalomas duomuo nežinomas, dokumento negeneruok ir atsakyk: NEED_MORE_DATA: ...
+- Niekada nepalik tuščių laukų ar laužtinių skliaustų dokumente. Jei trūksta nebūtino duomens, jo lauką praleisk.
+- Dokumento datą nustatyk automatiškai pagal šiandienos datą, jei konkreti dokumento data nenurodyta byloje.
+- Justice AI vidinio bylos numerio dokumente nerašyk. Naudok tik oficialų policijos, banko ar institucijos bylos numerį, jeigu toks randamas dokumentuose.
 - Dokumentas turi būti pilnai užpildytas ir paruoštas siuntimui.
 - Dokumentą pradėk nuo tinkamo gavėjo pagal pasirinktą šalį ir dokumento antraštės.
 - Jei pasirinkta Norvegija, nenaudok Lietuvos institucijų, nebent byloje aiškiai nurodyta, kad ginčas nagrinėjamas Lietuvoje.
 - Jei pasirinkta Jungtinė Karalystė, nenaudok Lietuvos institucijų.
 - Nenaudok kreipinių: Gerbiamasis, Gerbiamoji, Gerb. pone, Gerb. ponia.
-- Dokumento viršuje įrašyk: „Sukūrė Justice AI“. Bylos numerio dokumente nerašyk, nebent jis būtinas vidinei nuorodai.
+- Dokumento viršuje įrašyk: „Sukūrė Justice AI“. Justice AI vidinio bylos numerio dokumente nerašyk.
 - Įtrauk galimai taikytinus teisės aktus su straipsnių / paragrafų numeriais, bet neteik kategoriško teiginio, kad nusikaltimas įvykdytas.
 - Jei dokumente yra interneto nuoroda, rodyk ją tik vieną kartą. Nekartok tos pačios nuorodos skliaustuose ir nekartok jos keliose vietose.
 - Google Drive nuorodą pateik taip: „Google Drive: https://...“.
@@ -695,13 +729,15 @@ Rules:
 - Determine the document recipient automatically from the document type, selected jurisdiction and case content. Do not ask who the document should be addressed to unless it is completely unclear whether it should go to a seller, bank, police or authority.
 - If the case concerns police response, discontinued investigation, case status, complaint progress or unanswered email, choose the police authority as recipient, not a consumer authority.
 - Do not use instructional phrases like [insert details here].
-- Never leave placeholders or square brackets in the document. If mandatory information is still missing, do not generate the document and reply: NEED_MORE_DATA: ...
+- Never leave placeholders or square brackets in the document. If non-essential data is missing, omit that line.
+- Set the document date automatically to today if no specific document date is found in the case.
+- Do not include the internal Justice AI case number in the document. Use only an official police, bank or authority case/reference number if it is found in the documents.
 - The document must be complete and ready to send.
 - Start with the correct recipient for the selected jurisdiction and the document title.
 - If Norway is selected, do not use Lithuanian institutions unless the case explicitly concerns Lithuania.
 - If the UK is selected, do not use Lithuanian institutions.
 - Do not use Dear Sir/Madam or gendered salutations.
-- Write "Created by Justice AI" at the top. Do not include the case number unless it is necessary as an internal reference.
+- Write "Created by Justice AI" at the top. Do not include the internal Justice AI case number.
 - Include relevant laws and section/article numbers, but do not state that a crime definitely occurred.
 - If a URL appears in the document, show it only once. Do not repeat the same URL in brackets or in multiple places.
 - Format Google Drive links as: "Google Drive: https://...".
@@ -730,9 +766,10 @@ Svarbu:
 - Pirmiausia pats nustatyk adresatą iš bylos konteksto, dokumento tipo ir pasirinktos šalies.
 - Neklausk „Kam adresuoti dokumentą?“, jei galima suprasti, ar dokumentas skirtas pardavėjui, bankui, policijai ar institucijai.
 - Jei byla susijusi su policijos sprendimu, skundo eiga, neatsakytu el. laišku ar tyrimo nutraukimu, adresatas yra policijos institucija, ne vartotojų teisių institucija.
-- Dokumentą generuoti galima tik tada, kai žinomi esminiai duomenys: pareiškėjo vardas ir pavardė, dokumento tikslas, įvykio / siuntimo data arba aiškus laikotarpis, ir konkretus prašymas.
-- Jei trūksta pareiškėjo vardo, datos / laikotarpio, policijos bylos numerio arba kontaktinio duomens, užduok klausimą.
+- Dokumento tikslą, prašymo esmę, datą, terminą ir adresatą pirmiausia nustatyk iš bylos ir PDF dokumentų. Neklausk apie juos, jei tai galima suprasti iš konteksto.
+- Kontaktinis telefonas nėra būtinas, jei jo nėra byloje; jo neklausk, nebent dokumento tipui jis kritiškai būtinas.
 - Jei trūksta tik nebūtinų duomenų, atsakyk READY.
+- Klausimą užduok tik tada, kai trūksta pareiškėjo vardo / pavardės arba visiškai neįmanoma nustatyti oficialaus prašymo tikslo iš bylos.
 - Klausimus užduok tik dėl tikrai svarbių duomenų, be kurių dokumentas būtų nepilnas arba netikslus.
 - Maksimaliai 3 klausimai.
 - Klausimai turi būti trumpi ir konkretūs.
@@ -761,9 +798,10 @@ Important:
 - First determine the recipient from case context, document type and selected jurisdiction.
 - Do not ask who the document should be addressed to if it can be determined whether it goes to a seller, bank, police or authority.
 - If the case concerns police decision, complaint progress, unanswered email or discontinued investigation, the recipient is a police authority, not a consumer authority.
-- Generate the document only when essential data is known: claimant full name, document purpose, event/sent date or clear timeframe, and exact request.
-- If claimant name, date/timeframe, police case number or contact detail is missing, ask for it.
+- First infer document purpose, request, date/timeframe and recipient from the case and PDF documents. Do not ask about them if they can be understood from context.
+- A phone number is not mandatory; do not ask for it unless it is critical for the document type.
 - If only non-essential data is missing, answer READY.
+- Ask only if the claimant full name is missing or if the official request purpose is impossible to determine from the case.
 - Ask only for essential missing data without which the document would be incomplete or inaccurate.
 - Maximum 3 questions.
 - Questions must be short and specific.
@@ -823,31 +861,28 @@ def document_has_placeholders(text: str) -> bool:
 def placeholder_fix_message(lang: str) -> str:
     if lang == "lt":
         return (
-            "📋 Dokumentui parengti trūksta duomenų:\n\n"
+            "📋 Dokumentui parengti trūksta svarbiausių duomenų:\n\n"
             "1. Vardas ir pavardė\n"
-            "2. Dokumentui svarbi data arba laikotarpis\n"
-            "3. El. paštas arba telefonas\n\n"
+            "2. El. paštas arba kitas kontaktas, jei norite jį įtraukti\n\n"
             "Atsakykite viena žinute."
         )
     if lang == "no":
         return (
-            "📋 Dokumentet mangler noen viktige opplysninger:\n\n"
+            "📋 Dokumentet mangler de viktigste opplysningene:\n\n"
             "1. Navn og etternavn\n"
-            "2. Viktig dato eller tidsperiode\n"
-            "3. E-post eller telefon\n\n"
+            "2. E-post eller annen kontakt hvis du vil ta den med\n\n"
             "Svar i én melding."
         )
     return (
-        "📋 The document is missing a few important details:\n\n"
+        "📋 The document is missing key details:\n\n"
         "1. Full name\n"
-        "2. Relevant date or timeframe\n"
-        "3. Email or phone\n\n"
+        "2. Email or another contact if you want it included\n\n"
         "Reply in one message."
     )
 
 def generate_document_for_state(chat_id: int, state: dict, lang: str, doc_type: str):
     send_message(chat_id, TEXT[lang]["doc_thinking"])
-    full_text = f"Bylos numeris: {state.get('case_number')}\n\n{state.get('case_text')}"
+    full_text = state.get('case_text') or ""
     answer = openai_request(build_doc_prompt(full_text, lang, state.get("country") or "lt", doc_type), lang)
     if not answer:
         err = "⚠️ Dokumento šiuo metu nepavyko paruošti. Bandykite dar kartą po kelių minučių." if lang == "lt" else "⚠️ The document could not be prepared right now. Please try again in a few minutes."
@@ -1006,7 +1041,7 @@ def handle_file(chat_id: int, msg: dict):
         else:
             status_text = "📎 Dokumentas pridėtas prie bylos."
         if not extracted:
-            status_text += "\n\n⚠️ Teksto nuskaityti nepavyko. Jei dokumente yra svarbi informacija, trumpai aprašykite ją viena žinute."
+            status_text += "\n\n⚠️ Dokumentas pridėtas, bet teksto nuskaityti nepavyko. Trumpai aprašykite svarbiausią informaciją viena žinute."
         else:
             status_text += "\n\n✅ Galite įkelti daugiau dokumentų arba pradėti bendrą bylos analizę."
     elif lang == "no":
@@ -1151,7 +1186,7 @@ def telegram_webhook():
                     send_message(chat_id, TEXT[lang]["no_case"])
                 else:
                     doc_type = data.replace("doc_", "")
-                    full_text = f"Bylos numeris: {state.get('case_number')}\n\n{state.get('case_text')}"
+                    full_text = state.get('case_text') or ""
                     check = openai_request(build_doc_missing_prompt(full_text, lang, state.get("country") or "lt", doc_type), lang)
                     missing = parse_missing_doc_questions(check)
                     if missing:
