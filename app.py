@@ -22,7 +22,7 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip()
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip() or os.getenv("RENDER_EXTERNAL_URL", "").strip()
-TEST_MODE = os.getenv("TEST_MODE", "true").lower() == "true"
+TEST_MODE = False  # production: Telegram Stars payments enabled
 
 TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}" if TELEGRAM_BOT_TOKEN else ""
 
@@ -171,6 +171,9 @@ TEXT = {
         "after_full": "❓ Norite patikslinti bylą?\n\nGalite užduoti papildomą klausimą arba sugeneruoti dokumentą pagal šią bylą.",
         "ask_question": "❓ Užduoti klausimą",
         "generate_doc": "📄 Generuoti dokumentą",
+        "new_case": "➕ Nauja byla",
+        "my_cases": "📁 Mano bylos",
+        "new_case_started": "➕ Pradėkime naują bylą. Ankstesnės bylos lieka išsaugotos ir jas galėsite tęsti vėliau.",
         "ask_prompt": "❓ Parašykite papildomą klausimą dėl šios bylos.",
         "choose_doc": "📄 Pasirinkite generuoti:",
         "no_case": "Pirmiausia aprašykite situaciją arba įkelkite dokumentą.",
@@ -193,6 +196,9 @@ TEXT = {
         "after_full": "❓ Would you like to clarify the case?\n\nYou can ask a follow-up question or generate a document based on this case.",
         "ask_question": "❓ Ask a question",
         "generate_doc": "📄 Generate document",
+        "new_case": "➕ New case",
+        "my_cases": "📁 My cases",
+        "new_case_started": "➕ Let us start a new case. Previous cases remain saved and can be continued later.",
         "ask_prompt": "❓ Write your follow-up question about this case.",
         "choose_doc": "📄 Select to generate:",
         "no_case": "Please describe the situation or upload a document first.",
@@ -215,6 +221,9 @@ TEXT = {
         "after_full": "❓ Vil du avklare saken videre?\n\nDu kan stille et oppfølgingsspørsmål eller generere et dokument basert på saken.",
         "ask_question": "❓ Still spørsmål",
         "generate_doc": "📄 Generer dokument",
+        "new_case": "➕ Ny sak",
+        "my_cases": "📁 Mine saker",
+        "new_case_started": "➕ La oss starte en ny sak. Tidligere saker lagres og kan fortsettes senere.",
         "ask_prompt": "❓ Skriv oppfølgingsspørsmålet ditt om denne saken.",
         "choose_doc": "📄 Velg å generere:",
         "no_case": "Beskriv situasjonen eller last opp et dokument først.",
@@ -341,10 +350,31 @@ def plan_menu(lang: str):
     return {"inline_keyboard": labels}
 
 
+def send_subscription_required(chat_id: int, lang: str):
+    if lang == "lt":
+        text = (
+            "🔒 Prieš siunčiant bylos informaciją ar dokumentus reikia aktyvuoti prieigą.\n\n"
+            "Pasirinkite abonementą:"
+        )
+    elif lang == "no":
+        text = (
+            "🔒 Før du sender saksinformasjon eller dokumenter, må du aktivere tilgang.\n\n"
+            "Velg abonnement:"
+        )
+    else:
+        text = (
+            "🔒 Before sending case information or documents, access must be activated.\n\n"
+            "Choose a subscription:"
+        )
+    send_message(chat_id, text, reply_markup=plan_menu(lang))
+
+
 def after_full_menu(lang: str):
     return {"inline_keyboard": [
         [{"text": TEXT[lang]["ask_question"], "callback_data": "ask_question"}],
         [{"text": TEXT[lang]["generate_doc"], "callback_data": "show_docs"}],
+        [{"text": TEXT[lang]["my_cases"], "callback_data": "case_list"}],
+        [{"text": TEXT[lang]["new_case"], "callback_data": "new_case"}],
     ]}
 
 
@@ -353,15 +383,21 @@ def file_action_menu(lang: str):
         return {"inline_keyboard": [
             [{"text": "📂 Bylos dokumentai", "callback_data": "case_docs"}],
             [{"text": "✅ Analizuoti bylą", "callback_data": "analyze_case"}],
+            [{"text": TEXT[lang]["my_cases"], "callback_data": "case_list"}],
+            [{"text": TEXT[lang]["new_case"], "callback_data": "new_case"}],
         ]}
     if lang == "no":
         return {"inline_keyboard": [
             [{"text": "📂 Saksdokumenter", "callback_data": "case_docs"}],
             [{"text": "✅ Analyser saken", "callback_data": "analyze_case"}],
+            [{"text": TEXT[lang]["my_cases"], "callback_data": "case_list"}],
+            [{"text": TEXT[lang]["new_case"], "callback_data": "new_case"}],
         ]}
     return {"inline_keyboard": [
         [{"text": "📂 Case documents", "callback_data": "case_docs"}],
         [{"text": "✅ Analyze case", "callback_data": "analyze_case"}],
+        [{"text": TEXT[lang]["my_cases"], "callback_data": "case_list"}],
+        [{"text": TEXT[lang]["new_case"], "callback_data": "new_case"}],
     ]}
 
 def detect_case_type(case_text: str) -> str:
@@ -648,6 +684,46 @@ def db_update_case(case_id: int, case_text: str):
 def db_add_case_file(case_id: int, file_name: str, file_type: str, telegram_file_id: str):
     if case_id:
         supabase.table("case_files").insert({"case_id": case_id, "file_name": file_name, "file_type": file_type, "telegram_file_id": telegram_file_id}).execute()
+
+
+def db_list_cases(telegram_id: int, limit: int = 10):
+    try:
+        res = (
+            supabase.table("cases")
+            .select("id, case_number, title, status, created_at")
+            .eq("telegram_id", telegram_id)
+            .order("id", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return res.data or []
+    except Exception as e:
+        logger.warning("Case list failed: %s", e)
+        return []
+
+
+def db_get_case(case_id: int, telegram_id: int):
+    try:
+        res = (
+            supabase.table("cases")
+            .select("*")
+            .eq("id", case_id)
+            .eq("telegram_id", telegram_id)
+            .execute()
+        )
+        return res.data[0] if res.data else None
+    except Exception as e:
+        logger.warning("Case get failed: %s", e)
+        return None
+
+
+def db_list_case_files(case_id: int):
+    try:
+        res = supabase.table("case_files").select("file_name").eq("case_id", case_id).execute()
+        return [row.get("file_name") for row in (res.data or []) if row.get("file_name")]
+    except Exception as e:
+        logger.warning("Case file list failed: %s", e)
+        return []
 
 
 def extract_text_from_file(file_name: str, file_bytes: bytes) -> str:
@@ -1168,6 +1244,69 @@ def generate_document_for_state(chat_id: int, state: dict, lang: str, doc_type: 
     send_chunks(chat_id, answer)
 
 
+def case_list_title(lang: str) -> str:
+    if lang == "lt":
+        return "📁 Jūsų išsaugotos bylos"
+    if lang == "no":
+        return "📁 Dine lagrede saker"
+    return "📁 Your saved cases"
+
+
+def no_saved_cases_text(lang: str) -> str:
+    if lang == "lt":
+        return "📁 Išsaugotų bylų dar nėra. Galite pradėti naują bylą."
+    if lang == "no":
+        return "📁 Ingen lagrede saker ennå. Du kan starte en ny sak."
+    return "📁 No saved cases yet. You can start a new case."
+
+
+def case_loaded_text(lang: str, case_number: str | None) -> str:
+    if lang == "lt":
+        return f"✅ Byla atidaryta.\n\n🆔 Bylos Nr.: {case_number or ''}"
+    if lang == "no":
+        return f"✅ Saken er åpnet.\n\n🆔 Saksnr.: {case_number or ''}"
+    return f"✅ Case opened.\n\n🆔 Case No.: {case_number or ''}"
+
+
+def show_case_list(chat_id: int, lang: str):
+    cases = db_list_cases(chat_id, limit=10)
+    if not cases:
+        send_message(chat_id, no_saved_cases_text(lang), reply_markup={"inline_keyboard": [[{"text": TEXT[lang]["new_case"], "callback_data": "new_case"}]]})
+        return
+
+    rows = []
+    for c in cases:
+        case_id = c.get("id")
+        case_number = c.get("case_number") or f"CASE-{case_id}"
+        title = (c.get("title") or "").replace("\n", " ").strip()
+        if len(title) > 36:
+            title = title[:33] + "..."
+        button_text = f"{case_number} — {title}" if title else str(case_number)
+        rows.append([{"text": button_text, "callback_data": f"select_case_{case_id}"}])
+    rows.append([{"text": TEXT[lang]["new_case"], "callback_data": "new_case"}])
+    send_message(chat_id, case_list_title(lang), reply_markup={"inline_keyboard": rows})
+
+
+def load_case_into_state(chat_id: int, state: dict, lang: str, case_id: int):
+    case = db_get_case(case_id, chat_id)
+    if not case:
+        send_message(chat_id, no_saved_cases_text(lang))
+        return
+    files = db_list_case_files(case_id)
+    state.update({
+        "case_text": case.get("case_text") or "",
+        "case_id": case.get("id"),
+        "case_number": case.get("case_number"),
+        "awaiting_followup": False,
+        "awaiting_doc_details": False,
+        "pending_doc_type": None,
+        "doc_extra_data": "",
+        "files": files,
+        "upload_menu_sent": False,
+    })
+    send_message(chat_id, case_loaded_text(lang, state.get("case_number")), reply_markup=file_action_menu(lang))
+
+
 def build_followup_prompt(case_text: str, question: str, lang: str, country: str):
     country_name = COUNTRIES.get(country, COUNTRIES["lt"])[lang]
     if lang == "lt":
@@ -1222,6 +1361,33 @@ def show_country(chat_id: int):
 def show_collect_case(chat_id: int):
     state = get_state(chat_id)
     send_message(chat_id, TEXT[state["lang"]]["collect_case"])
+
+
+def reset_current_case(state: dict):
+    # Keep language, accepted safety status, selected country and subscription.
+    # Clear only the active in-memory case selection. Existing cases stay saved in Supabase and can be opened from “My cases”.
+    state.update({
+        "case_text": None,
+        "case_id": None,
+        "case_number": None,
+        "awaiting_followup": False,
+        "awaiting_doc_details": False,
+        "pending_doc_type": None,
+        "doc_extra_data": "",
+        "files": [],
+        "upload_menu_sent": False,
+    })
+
+
+def start_new_case(chat_id: int, state: dict, lang: str):
+    active, until = db_subscription_active(chat_id)
+    if not active:
+        reset_current_case(state)
+        send_subscription_required(chat_id, lang)
+        return
+    reset_current_case(state)
+    send_message(chat_id, TEXT[lang]["new_case_started"])
+    show_collect_case(chat_id)
 
 
 def create_case_from_text(chat_id: int, user_text: str):
@@ -1404,22 +1570,13 @@ def telegram_webhook():
                 state["lang"] = lang
                 state["country"] = country
                 db_user_upsert(user, lang)
-                show_collect_case(chat_id)
+                send_subscription_required(chat_id, lang)
                 return jsonify({"ok": True})
 
             elif data.startswith("plan_"):
                 plan_key = data.replace("plan_", "")
                 plan = PLANS.get(plan_key)
                 if not plan:
-                    return jsonify({"ok": True})
-                if TEST_MODE:
-                    until = db_set_subscription(chat_id, plan_key, plan["months"], plan["stars"])
-                    send_message(chat_id, f"{TEXT[lang]['test_active']}\n{TEXT[lang]['active_until']} {until.date()}")
-                    if state.get("case_text"):
-                        send_message(chat_id, TEXT[lang]["thinking"])
-                        full_text = f"Bylos numeris: {state.get('case_number')}\n\n{state.get('case_text')}"
-                        answer = normalize_case_answer(openai_request(build_case_prompt(full_text, lang, state.get("country") or "lt", full=True), lang))
-                        send_chunks(chat_id, answer, reply_markup=after_full_menu(lang))
                     return jsonify({"ok": True})
                 description = f"{plan[lang]} access"
                 payload = f"sub|{plan_key}|{chat_id}"
@@ -1439,6 +1596,19 @@ def telegram_webhook():
                 else:
                     state["awaiting_followup"] = True
                     send_message(chat_id, TEXT[lang]["ask_prompt"])
+
+            elif data == "new_case":
+                start_new_case(chat_id, state, lang)
+
+            elif data == "case_list":
+                show_case_list(chat_id, lang)
+
+            elif data.startswith("select_case_"):
+                try:
+                    selected_case_id = int(data.replace("select_case_", ""))
+                    load_case_into_state(chat_id, state, lang, selected_case_id)
+                except Exception:
+                    show_case_list(chat_id, lang)
 
             elif data == "upload_more":
                 # Legacy callback kept for old Telegram messages. New menus no longer show this button.
@@ -1517,6 +1687,26 @@ def telegram_webhook():
                 show_start(chat_id, user)
                 return jsonify({"ok": True})
 
+            if text.startswith("/newcase") or text.startswith("/naujabyla"):
+                lang = state.get("lang") or detect_lang(user)
+                if not state.get("accepted"):
+                    show_start(chat_id, user)
+                elif not state.get("country"):
+                    show_country(chat_id)
+                else:
+                    start_new_case(chat_id, state, lang)
+                return jsonify({"ok": True})
+
+            if text.startswith("/cases") or text.startswith("/bylos"):
+                lang = state.get("lang") or detect_lang(user)
+                if not state.get("accepted"):
+                    show_start(chat_id, user)
+                elif not state.get("country"):
+                    show_country(chat_id)
+                else:
+                    show_case_list(chat_id, lang)
+                return jsonify({"ok": True})
+
             if msg.get("successful_payment"):
                 payload = msg["successful_payment"].get("invoice_payload", "")
                 if payload.startswith("sub|"):
@@ -1526,6 +1716,8 @@ def telegram_webhook():
                         lang = state.get("lang") or detect_lang(user)
                         until = db_set_subscription(chat_id, plan_key, plan["months"], plan["stars"])
                         send_message(chat_id, f"{TEXT[lang]['access_active']}\n{TEXT[lang]['active_until']} {until.date()}")
+                        reset_current_case(state)
+                        show_collect_case(chat_id)
                 return jsonify({"ok": True})
 
             if msg.get("document") or msg.get("photo"):
@@ -1534,7 +1726,11 @@ def telegram_webhook():
                 elif not state.get("country"):
                     show_country(chat_id)
                 else:
-                    handle_file(chat_id, msg)
+                    active, until = db_subscription_active(chat_id)
+                    if not active:
+                        send_subscription_required(chat_id, lang)
+                    else:
+                        handle_file(chat_id, msg)
                 return jsonify({"ok": True})
 
             lang = state.get("lang") or detect_lang(user)
@@ -1542,6 +1738,8 @@ def telegram_webhook():
                 show_start(chat_id, user)
             elif not state.get("country"):
                 show_country(chat_id)
+            elif not db_subscription_active(chat_id)[0]:
+                send_subscription_required(chat_id, lang)
             elif state.get("awaiting_doc_details") and state.get("case_text"):
                 state["awaiting_doc_details"] = False
                 doc_type = state.get("pending_doc_type") or "authority_complaint"
