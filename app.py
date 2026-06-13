@@ -1267,10 +1267,7 @@ def handle_file(chat_id: int, msg: dict):
             )
         else:
             status_text = "📎 Dokumentas pridėtas prie bylos."
-        if not extracted:
-            status_text += "\n\n⚠️ Dokumentas pridėtas, bet teksto nuskaityti nepavyko. Trumpai aprašykite svarbiausią informaciją viena žinute."
-        else:
-            status_text += "\n\n✅ Galite pradėti bendrą bylos analizę."
+        status_text += "\n\n✅ Galite pradėti bendrą bylos analizę."
     elif lang == "no":
         if created_now:
             status_text = (
