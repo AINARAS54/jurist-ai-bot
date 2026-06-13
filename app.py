@@ -543,31 +543,189 @@ def openai_request(prompt: str, lang: str) -> str:
     return r.json()["choices"][0]["message"]["content"].strip()
 
 
+
+def get_legal_reference_block(country: str, case_type: str, case_text: str, lang: str) -> str:
+    """
+    Deterministic legal reference map.
+    This prevents OpenAI from inventing different legal articles on each run.
+    """
+    text = (case_text or "").lower()
+    is_police = any(k in text for k in [
+        "policija", "politiet", "politi", "henlegg", "nutrauk", "nutraukt", "klage", "skund", "tyrimo"
+    ])
+    is_crypto_fraud = any(k in text for k in [
+        "crypto", "kript", "bitcoin", "usdt", "usdc", "binance", "wallet", "blockchain", "sukči", "sukci", "fraud", "bedrageri", "invest"
+    ])
+    has_large_loss = any(k in text for k in [
+        "18766", "18,766", "18 766", "didel", "betydelig", "large loss", "økonomisk tap", "finansinis nuostolis"
+    ])
+    has_organized = any(k in text for k in [
+        "organizuot", "organisert", "systemat", "whatsapp", "telegram", "platform", "platforma", "keli asmenys"
+    ])
+
+    if country == "no":
+        if lang == "lt":
+            lines = [
+                "NAUDOK TIK ŠIUOS TEISĖS AKTUS. Kitų straipsnių negeneruok.",
+                "",
+                "1. Straffeloven §371 – Bedrageri / sukčiavimas",
+                "Konkreti dalis: §371 a punktas.",
+                "Atitinka, kai yra galimas suklaidinimas, dėl kurio asmuo atliko veiksmą ar neveikimą ir patyrė nuostolį arba nuostolio riziką.",
+                "Bylos faktai, kurie gali pagrįsti: finansinis nuostolis, kripto pervedimai, investicinė platforma, wallet / blockchain duomenys, komunikacija su įtariamais asmenimis.",
+            ]
+            if is_crypto_fraud:
+                lines += [
+                    "",
+                    "Papildomai prie §371 gali būti minima: §371 b punktas, tik jei byloje yra neteisingų / neišsamių duomenų naudojimas arba duomenų / mokėjimo sistemos poveikis.",
+                ]
+            if has_large_loss or has_organized:
+                lines += [
+                    "",
+                    "2. Straffeloven §372 – Grovt bedrageri / stambus sukčiavimas",
+                    "Galimos dalys: §372 a punktas – reikšminga ekonominė žala; §372 c punktas – keli atvejai arba ilgesnis laikotarpis; §372 d punktas – kelių asmenų bendras, sisteminis arba organizuotas pobūdis.",
+                    "Naudok atsargiai: rašyk „gali būti aktualu“, jei byloje matomas didelis nuostolis, tęstinė schema arba organizuotumo požymiai.",
+                ]
+            if is_police:
+                lines += [
+                    "",
+                    "3. Straffeprosessloven – skundo dėl tyrimo nutraukimo / policijos sprendimo procedūra",
+                    "Konkretaus paragrafo nenurodyk, jei jo nėra bylos dokumentuose arba fiksuotame sąraše.",
+                    "Atitinkanti bylos dalis: policija nutraukė tyrimą, pateiktas skundas dėl nutraukimo, prašoma peržiūrėti sprendimą arba pateikti papildomus įrodymus.",
+                ]
+            return "\n".join(lines)
+
+        if lang == "no":
+            lines = [
+                "BRUK BARE DISSE RETTSGRUNNLAGENE. Ikke lag andre paragrafnumre.",
+                "",
+                "1. Straffeloven §371 – Bedrageri",
+                "Relevant del: §371 bokstav a.",
+                "Passer der det foreligger mulig villfarelse som får noen til å handle eller unnlate å handle, med tap eller fare for tap.",
+                "Saksfakta som kan støtte dette: økonomisk tap, kryptotransaksjoner, investeringsplattform, wallet-/blockchain-dokumentasjon, kommunikasjon med mistenkte.",
+            ]
+            if is_crypto_fraud:
+                lines += ["", "§371 bokstav b kan nevnes bare hvis saken gjelder uriktige/ufullstendige opplysninger eller påvirkning av data-/betalingssystem."]
+            if has_large_loss or has_organized:
+                lines += [
+                    "",
+                    "2. Straffeloven §372 – Grovt bedrageri",
+                    "Mulige deler: §372 bokstav a – betydelig økonomisk skade; bokstav c – flere anledninger eller over lengre tid; bokstav d – flere i fellesskap eller systematisk/organisert preg.",
+                    "Bruk forsiktig: skriv 'kan være relevant' hvis dokumentene viser stort tap, langvarig eller organisert fremgangsmåte.",
+                ]
+            if is_police:
+                lines += [
+                    "",
+                    "3. Straffeprosessloven – klage over henleggelse / politiets avgjørelse",
+                    "Ikke oppgi konkret paragrafnummer hvis det ikke fremgår av dokumentene eller denne faste listen.",
+                    "Relevant saksdel: politiets henleggelse, klage over henleggelse, krav om ny vurdering eller nye bevis.",
+                ]
+            return "\n".join(lines)
+
+        lines = [
+            "USE ONLY THESE LEGAL REFERENCES. Do not invent other article or section numbers.",
+            "",
+            "1. Straffeloven §371 – Fraud",
+            "Relevant part: §371(a).",
+            "Matches possible deception causing a person to act or omit to act, resulting in loss or risk of loss.",
+            "Supporting case facts may include: financial loss, cryptocurrency transfers, investment platform, wallet/blockchain evidence, communication with suspects.",
+        ]
+        if is_crypto_fraud:
+            lines += ["", "§371(b) may be mentioned only if the case concerns incorrect/incomplete information or misuse/impact on a data/payment system."]
+        if has_large_loss or has_organized:
+            lines += [
+                "",
+                "2. Straffeloven §372 – Aggravated fraud",
+                "Potential parts: §372(a) significant financial damage; §372(c) repeated conduct or longer period; §372(d) joint, systematic or organised character.",
+                "Use cautious wording: 'may be relevant' if the documents show major loss, repeated conduct or organisation.",
+            ]
+        if is_police:
+            lines += [
+                "",
+                "3. Straffeprosessloven – complaint against case closure / police decision",
+                "Do not provide a specific section number unless it is in the documents or in this fixed list.",
+                "Matching case part: police case closure, appeal/complaint, request for renewed assessment or submission of new evidence.",
+            ]
+        return "\n".join(lines)
+
+    if lang == "lt":
+        return (
+            "Naudok tik aiškiai su pasirinkta jurisdikcija ir bylos faktais susijusius teisės aktus. "
+            "Jei tikslaus straipsnio nežinai, nerašyk numerio. Kiekvienam teisės aktui nurodyk konkrečią dalį, atitikimo procentą ir bylos faktus."
+        )
+    if lang == "no":
+        return (
+            "Bruk bare rettsgrunnlag som tydelig passer jurisdiksjonen og saksfakta. "
+            "Hvis paragrafnummeret ikke er sikkert, ikke oppgi nummer. Vis relevant del, matchprosent og saksfakta for hvert punkt."
+        )
+    return (
+        "Use only legal references clearly matching the jurisdiction and case facts. "
+        "If the exact section is not certain, do not provide a number. Show relevant part, match percentage and case facts for each reference."
+    )
+
+
+def normalize_case_answer(text: str) -> str:
+    """Make Telegram case analysis readable even if the model returns compact text."""
+    if not text:
+        return text
+    result = text.strip()
+    headings = [
+        "🆔 Bylos numeris", "📋 Situacija", "⚖️ Galimai taikytini teisės aktai", "🎯 Rekomenduojami veiksmai", "📄 Galimi dokumentai",
+        "🆔 Case number", "📋 Situation", "⚖️ Potentially applicable legal provisions", "🎯 Recommended actions", "📄 Possible documents",
+        "🆔 Saksnummer", "📋 Situasjon", "⚖️ Mulige rettsgrunnlag", "🎯 Anbefalte tiltak", "📄 Mulige dokumenter",
+    ]
+    for h in headings:
+        result = re.sub(rf"\s*{re.escape(h)}\s*:?\s*", f"\n\n{h}\n\n", result)
+    # Put bullets and numbered lists on separate lines when model compresses them.
+    result = re.sub(r"\s+-\s+", "\n• ", result)
+    result = re.sub(r"(?<!\n)(\d+\.\s)", r"\n\1", result)
+    result = re.sub(r"\n{3,}", "\n\n", result)
+    return result.strip()
+
+
 def build_case_prompt(case_text: str, lang: str, country: str, full: bool):
     country_name = COUNTRIES.get(country, COUNTRIES["lt"])[lang]
+    case_type = detect_case_type(case_text)
+    legal_block = get_legal_reference_block(country, case_type, case_text, lang)
     if lang == "lt":
         if full:
             return f"""
 Atsakyk tik lietuviškai. Taikoma šalis / jurisdikcija: {country_name}.
 
-Paruošk trumpą pilną bylos vertinimą Telegram formatui.
+Paruošk pilną bylos vertinimą Telegram formatui.
 
-Naudok tik šiuos skyrius:
+Naudok TIK šiuos skyrius ir tarp kiekvieno skyriaus palik tuščią eilutę:
 
 🆔 Bylos numeris
+
 📋 Situacija
+
 ⚖️ Galimai taikytini teisės aktai
+
 🎯 Rekomenduojami veiksmai
+
 📄 Galimi dokumentai
 
 Taisyklės:
-- Atsakymas turi tilpti į 8–15 eilučių.
-- Nekurk ilgos ataskaitos.
+- Atsakymas turi būti aiškiai suformatuotas Telegram skaitymui.
+- Eilučių skaičius neribojamas, bet tekstas turi būti glaustas.
+- Kiekvieną skyrių pradėk nauja eilute.
+- Tarp skyrių palik vieną tuščią eilutę.
+- Nenaudok vientiso teksto bloko.
+- Rekomenduojami veiksmai turi būti numeruotas sąrašas.
+- Galimi dokumentai turi būti sąrašas per atskiras eilutes.
 - Nerodyk skyrių „Reikalingi įrodymai“, „Bylos stiprumas“, „Klausimai bylai patikslinti“ ir „Praktiniai pasiūlymai“, nebent vartotojas to aiškiai prašo.
 - Pinigų grąžinimo per banką skyrių rodyk tik jei byla tiesiogiai susijusi su kortelės ar bankiniu mokėjimu.
 - Jei byla apie policijos sprendimą, tyrimo nutraukimą, neatsakytą skundą ar bylos eigą, rekomenduok veiksmus policijos / prokuratūros procese, o ne vartotojų instituciją.
-- Nurodyk įstatymų, direktyvų arba kodeksų pavadinimus ir straipsnių / paragrafų numerius, jei jie gali būti aktualūs.
+- Teisės aktų skyriuje naudok tik fiksuotą sąrašą žemiau. Kitų straipsnių ar paragrafų negeneruok.
+- Kiekvienam teisės aktui privalomai nurodyk:
+  • straipsnį ir konkrečią dalį / punktą;
+  • atitikimo procentą 0–100 %;
+  • kuri konkreti bylos faktų dalis tai pagrindžia;
+  • kodėl ši dalis gali būti taikoma.
 - Neteik kategoriško teiginio, kad nusikaltimas įvykdytas. Naudok: „galimai taikytina“, „gali būti aktualu“, „gali būti vertinama pagal“.
+
+Fiksuoti teisės aktai ir atitikimo logika:
+{legal_block}
 
 Bylos informacija:
 {case_text}
@@ -575,16 +733,24 @@ Bylos informacija:
         return f"""
 Atsakyk tik lietuviškai. Taikoma šalis / jurisdikcija: {country_name}.
 
-Paruošk pirminį bylos vertinimą:
+Paruošk pirminį bylos vertinimą Telegram formatui su aiškiais tarpais tarp skyrių.
+
+Naudok skyrius:
 
 📋 Kategorija
+
 ⚠️ Pagrindinė problema
+
 ⚖️ Galimai taikytini teisės aktai
+
 📂 Trūkstami įrodymai
+
 🎯 Pirmas rekomenduojamas veiksmas
+
 🔓 Išplėstinio atsakymo galimybė
 
-Pateik ne daugiau kaip 2 klausimus ir ne daugiau kaip 2 pasiūlymus.
+Teisės aktus naudok tik iš šio fiksuoto sąrašo. Prie kiekvieno nurodyk konkrečią bylos dalį, kuri atitinka:
+{legal_block}
 
 Situacija:
 {case_text}
@@ -594,7 +760,10 @@ Situacija:
         return f"""
 Svar kun på norsk. Jurisdiksjon: {country_name}.
 
-Lag {'en kort full vurdering' if full else 'en kort førstevurdering'} for Telegram. Bruk 8-15 linjer. Ta med relevante lover og paragrafnumre når mulig. Ikke påstå at en straffbar handling definitivt har skjedd. Ikke vis lange bevislister, saksstyrke, spørsmål eller forslag med mindre brukeren ber om det.
+Lag {'en full vurdering' if full else 'en førstevurdering'} for Telegram med tydelige tomme linjer mellom seksjonene.
+
+Bruk bare disse rettsgrunnlagene. Ikke lag andre paragrafnumre. For hvert rettsgrunnlag skal du vise relevant del, matchprosent, hvilke saksfakta som støtter det og hvorfor det kan passe:
+{legal_block}
 
 Saksinformasjon:
 {case_text}
@@ -603,12 +772,14 @@ Saksinformasjon:
     return f"""
 Answer only in English. Jurisdiction: {country_name}.
 
-Prepare {'a concise full case review' if full else 'a short initial assessment'} for Telegram in 8-15 lines. Include relevant law names and article/section numbers where possible. Do not state that a crime definitely occurred. Do not show long evidence lists, case strength, questions or suggestions unless the user asks for them.
+Prepare {'a full case review' if full else 'an initial assessment'} for Telegram with clear blank lines between sections.
+
+Use only these legal references. Do not invent other article or section numbers. For each reference, show the relevant part, match percentage, supporting case facts and why it may apply:
+{legal_block}
 
 Case information:
 {case_text}
 """
-
 
 def document_name(doc_type: str, lang: str) -> str:
     names = {
@@ -677,6 +848,7 @@ def build_doc_prompt(case_text: str, lang: str, country: str, doc_type: str):
     doc = document_name(doc_type, lang)
     recipient_hint = jurisdiction_recipient_hint(country, doc_type, lang)
     case_type = detect_case_type(case_text)
+    legal_block = get_legal_reference_block(country, case_type, case_text, lang)
 
     if lang == "lt":
         return f"""
@@ -716,6 +888,9 @@ Svarbiausios taisyklės:
 - Jei telefono numeris randamas šalia policijos, banko ar institucijos pavadinimo, nelaikyk jo pareiškėjo telefonu.
 - Pareiškėjo paraše rodyk tik tuos kontaktus, kurie aiškiai priklauso pareiškėjui. Jei abejoji, telefono ir el. pašto nerodyk.
 - Vardą ir pavardę formatuok natūraliai: „Ainaras Kalnenas“, ne „Ainaras KALNENAS“.
+
+Fiksuoti teisės aktai ir atitikimo logika:
+{legal_block}
 
 Bylos informacija ir nuskaitytas dokumentų tekstas:
 {case_text}
@@ -758,6 +933,9 @@ Rules:
 - If a phone number appears near a police, bank or authority name, do not treat it as the claimant's phone number.
 - In the claimant signature, include only contact details that clearly belong to the claimant. If unsure, omit phone and email.
 - Format claimant names naturally, for example “Ainaras Kalnenas”, not “Ainaras KALNENAS”.
+
+Fixed legal references and matching logic:
+{legal_block}
 
 Case information and extracted document text:
 {case_text}
@@ -997,6 +1175,7 @@ def create_case_from_text(chat_id: int, user_text: str):
         send_message(chat_id, TEXT[lang]["thinking"])
         full_text = f"Bylos numeris: {case_number}\n\n{user_text}"
         answer = openai_request(build_case_prompt(full_text, lang, country, full=True), lang)
+        answer = normalize_case_answer(answer)
         if not answer:
             send_message(chat_id, "⚠️ Analizės šiuo metu nepavyko atlikti. Bandykite dar kartą po kelių minučių." if lang == "lt" else "⚠️ The analysis could not be completed right now. Please try again in a few minutes.")
             return
@@ -1005,6 +1184,7 @@ def create_case_from_text(chat_id: int, user_text: str):
 
     send_message(chat_id, TEXT[lang]["thinking"])
     answer = openai_request(build_case_prompt(user_text, lang, country, full=False), lang)
+    answer = normalize_case_answer(answer)
     if not answer:
         send_message(chat_id, "⚠️ Analizės šiuo metu nepavyko atlikti. Bandykite dar kartą po kelių minučių." if lang == "lt" else "⚠️ The analysis could not be completed right now. Please try again in a few minutes.")
         return
@@ -1186,6 +1366,7 @@ def telegram_webhook():
                         send_message(chat_id, TEXT[lang]["thinking"])
                         full_text = f"Bylos numeris: {state.get('case_number')}\n\n{state.get('case_text')}"
                         answer = openai_request(build_case_prompt(full_text, lang, state.get("country") or "lt", full=True), lang)
+                        answer = normalize_case_answer(answer)
                         send_chunks(chat_id, answer, reply_markup=after_full_menu(lang))
                     return jsonify({"ok": True})
                 description = f"{plan[lang]} access"
@@ -1234,6 +1415,7 @@ def telegram_webhook():
                         send_message(chat_id, TEXT[lang]["thinking"])
                         full_text = f"Bylos numeris: {state.get('case_number')}\n\n{state.get('case_text')}"
                         answer = openai_request(build_case_prompt(full_text, lang, state.get("country") or "lt", full=True), lang)
+                        answer = normalize_case_answer(answer)
                         if not answer:
                             err = "⚠️ Analizės šiuo metu nepavyko atlikti. Bandykite dar kartą po kelių minučių." if lang == "lt" else "⚠️ The analysis could not be completed right now. Please try again in a few minutes."
                             send_message(chat_id, err)
