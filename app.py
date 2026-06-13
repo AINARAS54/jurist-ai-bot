@@ -1,6 +1,5 @@
 import os
 import re
-import base64
 import logging
 from io import BytesIO
 from datetime import datetime, timezone, timedelta
@@ -386,13 +385,112 @@ def detect_case_type(case_text: str) -> str:
 
 
 
-def is_police_case(case_text: str) -> bool:
+
+
+def get_legal_reference_block(country: str, case_type: str, case_text: str, lang: str) -> str:
+    """
+    Fixed legal reference map to prevent AI from inventing different articles on each run.
+    The block tells OpenAI which articles/sections may be used and how to link them to case facts.
+    """
     text = (case_text or "").lower()
-    return any(k in text for k in [
-        "policija", "politiet", "politi", "prokurat", "henleggelse", "henlagt",
-        "nutrauk", "nutraukt", "nutraukimo", "skund", "klage", "pareiškim",
-        "etterforskning", "tyrimas", "tyrimo", "manglende svar", "neatsak"
-    ])
+    is_police = any(k in text for k in ["policija", "politiet", "politi", "henlegg", "nutrauk", "klage", "skund"])
+    is_crypto_fraud = any(k in text for k in ["crypto", "kript", "bitcoin", "usdt", "usdc", "binance", "wallet", "blockchain", "sukči", "fraud", "bedrageri"])
+    has_large_loss = any(k in text for k in ["18766", "18,766", "didel", "betydelig", "large loss", "økonomisk tap"])
+    has_organized = any(k in text for k in ["organizuot", "organisert", "systemat", "whatsapp", "telegram", "platform", "platforma"])
+
+    if country == "no":
+        if lang == "lt":
+            lines = [
+                "Naudok tik žemiau nurodytus teisės aktus. Negeneruok kitų straipsnių, jei jų nėra šiame sąraše.",
+                "",
+                "1. Straffeloven §371 – Bedrageri / sukčiavimas",
+                "Atitinkanti dalis: §371 a punktas – suklaidinimas, dėl kurio asmuo atlieka veiksmą ar neveikimą ir patiria nuostolį arba nuostolio riziką.",
+                "Taip pat gali būti aktualus §371 b punktas, jei byloje yra neteisėtas ar klaidingas duomenų / mokėjimo sistemos naudojimas.",
+                "Bylos atitikimo kriterijai: klaidinimas, finansinis nuostolis, kripto pervedimai, netikra investicinė platforma, wallet / blockchain duomenys.",
+            ]
+            if has_large_loss or has_organized:
+                lines += [
+                    "",
+                    "2. Straffeloven §372 – Grovt bedrageri / stambus sukčiavimas",
+                    "Galimai atitinkanti dalis: §372 a punktas – reikšminga ekonominė žala; §372 c punktas – veika per kelis atvejus arba ilgesnį laiką; §372 d punktas – kelių asmenų bendras, sisteminis arba organizuotas pobūdis.",
+                    "Naudok atsargiai: rašyk „gali būti aktualu“, jei dokumentuose yra didelis nuostolis, tęstinė schema arba organizuotumo požymių.",
+                ]
+            if is_police:
+                lines += [
+                    "",
+                    "3. Straffeprosessloven – skundo dėl tyrimo nutraukimo / policijos sprendimo procedūra",
+                    "Atitinkanti situacijos dalis: policijos sprendimas nutraukti tyrimą, skundas dėl nutraukimo, prašymas peržiūrėti sprendimą arba pateikti papildomus įrodymus.",
+                    "Nerašyk konkretaus Straffeprosessloven paragrafo, jei jo tiksliai nėra byloje ar fiksuotame sąraše.",
+                ]
+            return "\n".join(lines)
+
+        if lang == "no":
+            lines = [
+                "Bruk bare følgende rettsgrunnlag. Ikke lag andre paragrafnumre hvis de ikke står her.",
+                "",
+                "1. Straffeloven §371 – Bedrageri",
+                "Relevant del: §371 bokstav a – villfarelse som rettsstridig får noen til å gjøre eller unnlate noe som volder tap eller fare for tap.",
+                "§371 bokstav b kan være relevant ved uriktige eller ufullstendige opplysninger / påvirkning av datasystem eller betalingssystem.",
+                "Faktisk kobling: økonomisk tap, kryptotransaksjoner, investeringsplattform, wallet-/blockchain-dokumentasjon.",
+            ]
+            if has_large_loss or has_organized:
+                lines += [
+                    "",
+                    "2. Straffeloven §372 – Grovt bedrageri",
+                    "Mulig relevant del: §372 bokstav a – betydelig økonomisk skade; bokstav c – flere anledninger eller over lengre tid; bokstav d – flere i fellesskap eller systematisk/organisert preg.",
+                    "Bruk forsiktig formulering: 'kan være relevant' dersom dokumentene viser stort tap, langvarig eller organisert fremgangsmåte.",
+                ]
+            if is_police:
+                lines += [
+                    "",
+                    "3. Straffeprosessloven – klage over henleggelse / politiets avgjørelse",
+                    "Relevant situasjonsdel: politiets henleggelse, klage på henleggelsen, krav om ny vurdering eller innsending av nye bevis.",
+                    "Ikke oppgi konkret paragrafnummer i straffeprosessloven hvis det ikke fremgår sikkert av saken eller av denne listen.",
+                ]
+            return "\n".join(lines)
+
+        lines = [
+            "Use only the following legal references. Do not invent other article/section numbers.",
+            "",
+            "1. Straffeloven §371 – Fraud",
+            "Relevant part: §371(a) – deception causing a person to act or omit to act, resulting in loss or risk of loss.",
+            "§371(b) may be relevant if the case involves incorrect/incomplete information or misuse of a data/payment system.",
+            "Matching facts: financial loss, cryptocurrency transfers, investment platform, wallet/blockchain evidence.",
+        ]
+        if has_large_loss or has_organized:
+            lines += [
+                "",
+                "2. Straffeloven §372 – Aggravated fraud",
+                "Potentially relevant part: §372(a) significant financial damage; §372(c) repeated/longer period; §372(d) joint, systematic or organised character.",
+                "Use cautious wording: 'may be relevant' if the documents show major loss, repeated conduct or organisation.",
+            ]
+        if is_police:
+            lines += [
+                "",
+                "3. Straffeprosessloven – complaint against case closure / police decision",
+                "Matching part of the situation: police case closure, appeal/complaint, request for renewed assessment or submission of new evidence.",
+                "Do not provide a specific Straffeprosessloven section number unless it is certain from the case or this fixed list.",
+            ]
+        return "\n".join(lines)
+
+    if lang == "lt":
+        return (
+            "Naudok tik teisės aktus, kurie aiškiai susiję su pasirinkta jurisdikcija ir bylos faktais. "
+            "Kiekvienam teisės aktui nurodyk: straipsnį / dalį, kodėl ji gali atitikti situaciją ir kokie bylos faktai tai pagrindžia. "
+            "Jei konkretaus straipsnio nežinai tiksliai, nerašyk numerio."
+        )
+    if lang == "no":
+        return (
+            "Bruk bare rettsgrunnlag som tydelig passer jurisdiksjonen og saksfakta. "
+            "For hver lovhenvisning skal du vise paragraf/del, hvorfor den kan passe og hvilke saksfakta som støtter den. "
+            "Hvis paragrafnummeret ikke er sikkert, ikke oppgi nummer."
+        )
+    return (
+        "Use only legal references clearly matching the jurisdiction and case facts. "
+        "For each reference, show the article/section part, why it may match and the case facts supporting it. "
+        "If the exact section number is not certain, do not provide a number."
+    )
+
 
 def doc_label(doc_type: str, lang: str, country: str | None = None) -> str:
     country = country or "lt"
@@ -435,11 +533,12 @@ def relevant_doc_types(case_text: str, country: str | None = None) -> list[str]:
         "chargeback", "lėšų", "lesu", "binance", "spectrocoin", "usdc", "crypto", "kript"
     ])
 
-    if police_context:
-        return ["appeal_police_decision"]
-
-    if case_type == "fraud":
-        docs = ["fraud_report"]
+    if case_type == "fraud" or police_context:
+        docs = []
+        if police_context:
+            docs.append("appeal_police_decision")
+        else:
+            docs.append("fraud_report")
         if bank_context:
             docs.append("bank_refund")
         return docs
@@ -516,112 +615,14 @@ def db_add_case_file(case_id: int, file_name: str, file_type: str, telegram_file
         supabase.table("case_files").insert({"case_id": case_id, "file_name": file_name, "file_type": file_type, "telegram_file_id": telegram_file_id}).execute()
 
 
-
-def ocr_pdf_with_openai(file_bytes: bytes, max_pages: int = 3) -> str:
-    """
-    OCR fallback for image-based PDFs (for example Gmail print/export PDFs).
-    Uses PyMuPDF to render pages as images and OpenAI Vision to extract visible text.
-    """
-    if not file_bytes:
-        return ""
-
-    try:
-        import fitz  # PyMuPDF
-    except Exception as e:
-        logger.warning("PyMuPDF is not installed or cannot be imported: %s", e)
-        return ""
-
-    try:
-        pdf = fitz.open(stream=file_bytes, filetype="pdf")
-        if len(pdf) == 0:
-            return ""
-
-        image_contents = []
-        for page_index in range(min(len(pdf), max_pages)):
-            page = pdf.load_page(page_index)
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
-            png_bytes = pix.tobytes("png")
-            b64 = base64.b64encode(png_bytes).decode("utf-8")
-            image_contents.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{b64}"}
-            })
-
-        if not image_contents:
-            return ""
-
-        logger.info("PDF OCR START: pages=%s", len(image_contents))
-
-        payload = {
-            "model": OPENAI_MODEL,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an OCR engine. Extract all visible text from the provided PDF page images. "
-                        "Preserve names, dates, case numbers, email addresses, amounts, links and addresses. "
-                        "Return only extracted text. Do not summarize."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "Extract all visible text from these PDF page images."},
-                        *image_contents,
-                    ],
-                },
-            ],
-            "temperature": 0,
-        }
-
-        r = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
-            json=payload,
-            timeout=90,
-        )
-
-        if not r.ok:
-            logger.error("OpenAI OCR error: %s %s", r.status_code, r.text[:500])
-            return ""
-
-        text = r.json()["choices"][0]["message"]["content"].strip()
-        logger.info("PDF OCR DONE: chars=%s", len(text))
-        return text
-
-    except Exception as e:
-        logger.warning("PDF OCR failed: %s", e)
-        return ""
-
-
 def extract_text_from_file(file_name: str, file_bytes: bytes) -> str:
     lower = (file_name or "").lower()
     try:
         if lower.endswith(".txt"):
             return file_bytes.decode("utf-8", errors="ignore")
-
         if lower.endswith(".pdf"):
-            text_parts = []
-
-            # 1) pypdf text layer
-            try:
-                reader = PdfReader(BytesIO(file_bytes))
-                text_parts.append("\n".join((page.extract_text() or "") for page in reader.pages).strip())
-            except Exception as e:
-                logger.warning("pypdf extraction failed: %s", e)
-
-            text = "\n\n".join(part for part in text_parts if part).strip()
-            logger.info("PDF text layer chars=%s for %s", len(text), file_name)
-
-            # 2) OCR fallback for image/scanned PDFs
-            if len(text) < 50:
-                ocr_text = ocr_pdf_with_openai(file_bytes)
-                if ocr_text and len(ocr_text.strip()) > len(text):
-                    text = ocr_text.strip()
-
-            logger.info("PDF final extracted chars=%s for %s", len(text), file_name)
-            return text
-
+            reader = PdfReader(BytesIO(file_bytes))
+            return "\n".join((page.extract_text() or "") for page in reader.pages).strip()
         if lower.endswith(".docx"):
             doc = Document(BytesIO(file_bytes))
             return "\n".join(p.text for p in doc.paragraphs).strip()
@@ -652,6 +653,8 @@ def openai_request(prompt: str, lang: str) -> str:
 
 def build_case_prompt(case_text: str, lang: str, country: str, full: bool):
     country_name = COUNTRIES.get(country, COUNTRIES["lt"])[lang]
+    case_type = detect_case_type(case_text)
+    legal_block = get_legal_reference_block(country, case_type, case_text, lang)
     if lang == "lt":
         if full:
             return f"""
@@ -661,7 +664,7 @@ Paruošk trumpą pilną bylos vertinimą Telegram formatui.
 
 Naudok tik šiuos skyrius:
 
-⚖️ Bylos analizė
+🆔 Bylos numeris
 📋 Situacija
 ⚖️ Galimai taikytini teisės aktai
 🎯 Rekomenduojami veiksmai
@@ -673,8 +676,13 @@ Taisyklės:
 - Nerodyk skyrių „Reikalingi įrodymai“, „Bylos stiprumas“, „Klausimai bylai patikslinti“ ir „Praktiniai pasiūlymai“, nebent vartotojas to aiškiai prašo.
 - Pinigų grąžinimo per banką skyrių rodyk tik jei byla tiesiogiai susijusi su kortelės ar bankiniu mokėjimu.
 - Jei byla apie policijos sprendimą, tyrimo nutraukimą, neatsakytą skundą ar bylos eigą, rekomenduok veiksmus policijos / prokuratūros procese, o ne vartotojų instituciją.
-- Nurodyk konkrečius straipsnius / paragrafus tik jei esi pakankamai tikras. Jei nesi tikras dėl numerio, nurodyk tik įstatymo pavadinimą be išgalvoto straipsnio.
+- Teisės aktų skyriuje privalomai naudok fiksuotą sąrašą žemiau.
+- Kiekvienam teisės aktui nurodyk: straipsnį / dalį, atitikimo procentą, kodėl tinka, ir kuri bylos faktų dalis tai pagrindžia.
+- Negeneruok kitų straipsnių ar paragrafų, kurių nėra fiksuotame sąraše.
 - Neteik kategoriško teiginio, kad nusikaltimas įvykdytas. Naudok: „galimai taikytina“, „gali būti aktualu“, „gali būti vertinama pagal“.
+
+Fiksuoti teisės aktai ir atitikimo logika:
+{legal_block}
 
 Bylos informacija:
 {case_text}
@@ -692,6 +700,8 @@ Paruošk pirminį bylos vertinimą:
 🔓 Išplėstinio atsakymo galimybė
 
 Pateik ne daugiau kaip 2 klausimus ir ne daugiau kaip 2 pasiūlymus.
+Teisės aktus naudok tik iš šio fiksuoto sąrašo ir prie kiekvieno nurodyk, kuri situacijos dalis atitinka:
+{legal_block}
 
 Situacija:
 {case_text}
@@ -701,7 +711,10 @@ Situacija:
         return f"""
 Svar kun på norsk. Jurisdiksjon: {country_name}.
 
-Lag {'en kort full vurdering' if full else 'en kort førstevurdering'} for Telegram. Bruk 8-15 linjer. Ta med relevante lover og paragrafnumre når mulig. Ikke påstå at en straffbar handling definitivt har skjedd. Ikke vis lange bevislister, saksstyrke, spørsmål eller forslag med mindre brukeren ber om det.
+Lag {'en kort full vurdering' if full else 'en kort førstevurdering'} for Telegram. Bruk 8-15 linjer. Ikke påstå at en straffbar handling definitivt har skjedd. Ikke vis lange bevislister, saksstyrke, spørsmål eller forslag med mindre brukeren ber om det.
+
+Bruk bare disse rettsgrunnlagene og vis hvilken del av saken som passer til hvert punkt:
+{legal_block}
 
 Saksinformasjon:
 {case_text}
@@ -710,7 +723,10 @@ Saksinformasjon:
     return f"""
 Answer only in English. Jurisdiction: {country_name}.
 
-Prepare {'a concise full case review' if full else 'a short initial assessment'} for Telegram in 8-15 lines. Include relevant law names and article/section numbers where possible. Do not state that a crime definitely occurred. Do not show long evidence lists, case strength, questions or suggestions unless the user asks for them.
+Prepare {'a concise full case review' if full else 'a short initial assessment'} for Telegram in 8-15 lines. Do not state that a crime definitely occurred. Do not show long evidence lists, case strength, questions or suggestions unless the user asks for them.
+
+Use only these legal references and show which part of the case matches each reference:
+{legal_block}
 
 Case information:
 {case_text}
@@ -784,6 +800,7 @@ def build_doc_prompt(case_text: str, lang: str, country: str, doc_type: str):
     doc = document_name(doc_type, lang)
     recipient_hint = jurisdiction_recipient_hint(country, doc_type, lang)
     case_type = detect_case_type(case_text)
+    legal_block = get_legal_reference_block(country, case_type, case_text, lang)
 
     if lang == "lt":
         return f"""
@@ -811,7 +828,7 @@ Svarbiausios taisyklės:
 - Jei pasirinkta Jungtinė Karalystė, nenaudok Lietuvos institucijų.
 - Nenaudok kreipinių: Gerbiamasis, Gerbiamoji, Gerb. pone, Gerb. ponia.
 - Dokumento viršuje įrašyk: „Sukūrė Justice AI“. Justice AI vidinio bylos numerio dokumente nerašyk.
-- Įtrauk galimai taikytinus teisės aktus su straipsnių / paragrafų numeriais, bet neteik kategoriško teiginio, kad nusikaltimas įvykdytas.
+- Įtrauk tik fiksuotus galimai taikytinus teisės aktus iš žemiau esančio sąrašo. Prie kiekvieno nurodyk straipsnio dalį, atitikimo pagrindą ir bylos faktus, kurie tai pagrindžia. Neteik kategoriško teiginio, kad nusikaltimas įvykdytas.
 - Jei dokumente yra interneto nuoroda, rodyk ją tik vieną kartą. Nekartok tos pačios nuorodos skliaustuose ir nekartok jos keliose vietose.
 - Google Drive nuorodą pateik taip: „Google Drive: https://...“.
 - Jei yra aiškūs priedai pagal bylą, naudok skyrių „Priedai:“ ir išvardink tik realiai byloje minimus priedus. Jei priedų neįmanoma nustatyti, šio skyriaus nerodyk.
@@ -823,6 +840,9 @@ Svarbiausios taisyklės:
 - Jei telefono numeris randamas šalia policijos, banko ar institucijos pavadinimo, nelaikyk jo pareiškėjo telefonu.
 - Pareiškėjo paraše rodyk tik tuos kontaktus, kurie aiškiai priklauso pareiškėjui. Jei abejoji, telefono ir el. pašto nerodyk.
 - Vardą ir pavardę formatuok natūraliai: „Ainaras Kalnenas“, ne „Ainaras KALNENAS“.
+
+Fiksuoti teisės aktai ir atitikimo logika:
+{legal_block}
 
 Bylos informacija ir nuskaitytas dokumentų tekstas:
 {case_text}
@@ -853,7 +873,7 @@ Rules:
 - If the UK is selected, do not use Lithuanian institutions.
 - Do not use Dear Sir/Madam or gendered salutations.
 - Write "Created by Justice AI" at the top. Do not include the internal Justice AI case number.
-- Include relevant laws and section/article numbers, but do not state that a crime definitely occurred.
+- Include only the fixed legal references listed below. For each, show the relevant part, matching reason and case facts supporting it. Do not state that a crime definitely occurred.
 - If a URL appears in the document, show it only once. Do not repeat the same URL in brackets or in multiple places.
 - Format Google Drive links as: "Google Drive: https://...".
 - If real attachments are identifiable from the case, include an Attachments section. Otherwise omit it.
@@ -865,6 +885,9 @@ Rules:
 - If a phone number appears near a police, bank or authority name, do not treat it as the claimant's phone number.
 - In the claimant signature, include only contact details that clearly belong to the claimant. If unsure, omit phone and email.
 - Format claimant names naturally, for example “Ainaras Kalnenas”, not “Ainaras KALNENAS”.
+
+Fixed legal references and matching logic:
+{legal_block}
 
 Case information and extracted document text:
 {case_text}
@@ -1189,36 +1212,39 @@ def handle_file(chat_id: int, msg: dict):
         if created_now:
             status_text = (
                 f"📁 Byla sukurta\n\n"
+                f"🆔 Bylos Nr.: {state.get('case_number')}\n\n"
                 f"📎 Dokumentas pridėtas prie bylos."
             )
         else:
             status_text = "📎 Dokumentas pridėtas prie bylos."
         if not extracted:
-            status_text += "\n\n✅ Dokumentas išsaugotas. Galite trumpai aprašyti svarbią informaciją arba pradėti bendrą bylos analizę."
+            status_text += "\n\n⚠️ Dokumentas pridėtas, bet teksto nuskaityti nepavyko. Trumpai aprašykite svarbiausią informaciją viena žinute."
         else:
             status_text += "\n\n✅ Galite pradėti bendrą bylos analizę."
     elif lang == "no":
         if created_now:
             status_text = (
                 f"📁 Sak opprettet\n\n"
+                f"🆔 Saksnr.: {state.get('case_number')}\n\n"
                 f"📎 Dokumentet er lagt til saken."
             )
         else:
             status_text = "📎 Dokumentet er lagt til saken."
         if not extracted:
-            status_text += "\n\n✅ Dokumentet er lagret. Du kan kort beskrive viktig informasjon eller starte samlet analyse."
+            status_text += "\n\n⚠️ Tekst kunne ikke leses. Hvis dokumentet inneholder viktig informasjon, beskriv det kort i én melding."
         else:
             status_text += "\n\n✅ Du kan starte samlet analyse."
     else:
         if created_now:
             status_text = (
                 f"📁 Case created\n\n"
+                f"🆔 Case No.: {state.get('case_number')}\n\n"
                 f"📎 Document added to the case."
             )
         else:
             status_text = "📎 Document added to the case."
         if not extracted:
-            status_text += "\n\n✅ Document saved. You can briefly describe important information or start the combined case analysis."
+            status_text += "\n\n⚠️ Text could not be extracted. If the document contains important information, briefly describe it in one message."
         else:
             status_text += "\n\n✅ You can start the combined case analysis."
 
@@ -1231,8 +1257,15 @@ def handle_file(chat_id: int, msg: dict):
         send_message(chat_id, status_text, reply_markup=file_action_menu(lang))
         state["upload_menu_sent"] = True
     else:
-        # Keep later uploads quiet unless the user checks document list or starts analysis.
-        return
+        # Subsequent single-file uploads are added silently unless text extraction failed.
+        if not extracted:
+            if lang == "lt":
+                short_text = "⚠️ Dokumentas pridėtas, bet teksto nuskaityti nepavyko. Trumpai aprašykite svarbiausią informaciją viena žinute."
+            elif lang == "no":
+                short_text = "⚠️ Dokumentet er lagt til saken, men teksten kunne ikke leses. Beskriv det viktigste i én melding."
+            else:
+                short_text = "⚠️ Document added, but text could not be extracted. Briefly describe the most important information in one message."
+            send_message(chat_id, short_text)
 
 
 @app.route("/", methods=["GET"])
@@ -1352,13 +1385,6 @@ def telegram_webhook():
                 else:
                     doc_type = data.replace("doc_", "")
                     full_text = state.get('case_text') or ""
-
-                    # Police / investigation-closure cases usually already contain enough context
-                    # in the uploaded police letters and complaint. Do not ask redundant questions.
-                    if doc_type == "appeal_police_decision" and is_police_case(full_text):
-                        generate_document_for_state(chat_id, state, lang, doc_type)
-                        return jsonify({"ok": True})
-
                     check = openai_request(build_doc_missing_prompt(full_text, lang, state.get("country") or "lt", doc_type), lang)
                     missing = parse_missing_doc_questions(check)
                     if missing:
