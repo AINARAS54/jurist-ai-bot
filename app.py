@@ -1570,7 +1570,17 @@ def telegram_webhook():
                 state["lang"] = lang
                 state["country"] = country
                 db_user_upsert(user, lang)
-                send_subscription_required(chat_id, lang)
+
+                active, until = db_subscription_active(chat_id)
+                if active:
+                    send_message(chat_id, f"{TEXT[lang]['active_until']} {until.date()}")
+                    if state.get("case_id") and state.get("case_text"):
+                        send_message(chat_id, "✅ Galite tęsti aktyvią bylą." if lang == "lt" else ("✅ Du kan fortsette den aktive saken." if lang == "no" else "✅ You can continue the active case."), reply_markup=file_action_menu(lang))
+                    else:
+                        show_case_list(chat_id, lang)
+                        show_collect_case(chat_id)
+                else:
+                    send_subscription_required(chat_id, lang)
                 return jsonify({"ok": True})
 
             elif data.startswith("plan_"):
