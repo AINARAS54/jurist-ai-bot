@@ -131,9 +131,7 @@ SAFETY_TEXT = {
 
 • Duomenys saugomi iki prenumeratos pabaigos.
 
-• Pasibaigus prenumeratai duomenys automatiškai ištrinami.
-
-✅ Suprantu ir sutinku""",
+• Pasibaigus prenumeratai duomenys automatiškai ištrinami.""",
 
     "en": """🔐 Security and confidentiality
 
@@ -141,9 +139,7 @@ SAFETY_TEXT = {
 
 • Data is stored until the subscription ends.
 
-• After the subscription ends, the data is automatically deleted.
-
-✅ I understand and agree""",
+• After the subscription ends, the data is automatically deleted.""",
 
     "no": """🔐 Sikkerhet og konfidensialitet
 
@@ -151,9 +147,7 @@ SAFETY_TEXT = {
 
 • Data lagres til abonnementet avsluttes.
 
-• Etter at abonnementet avsluttes slettes dataene automatisk.
-
-✅ Jeg forstår og godtar""",
+• Etter at abonnementet avsluttes slettes dataene automatisk.""",
 }
 
 TEXT = {
@@ -370,35 +364,55 @@ def send_subscription_required(chat_id: int, lang: str):
 
 
 def after_full_menu(lang: str):
+    return open_case_menu(lang)
+
+
+def closed_case_menu(lang: str):
+    if lang == "lt":
+        open_text = "📂 Atverti bylą"
+    elif lang == "no":
+        open_text = "📂 Åpne saken"
+    else:
+        open_text = "📂 Open case"
     return {"inline_keyboard": [
-        [{"text": TEXT[lang]["ask_question"], "callback_data": "ask_question"}],
-        [{"text": TEXT[lang]["generate_doc"], "callback_data": "show_docs"}],
+        [{"text": open_text, "callback_data": "open_case"}],
         [{"text": TEXT[lang]["my_cases"], "callback_data": "case_list"}],
         [{"text": TEXT[lang]["new_case"], "callback_data": "new_case"}],
     ]}
 
 
-def file_action_menu(lang: str):
+def open_case_menu(lang: str):
     if lang == "lt":
         return {"inline_keyboard": [
             [{"text": "📂 Bylos dokumentai", "callback_data": "case_docs"}],
-            [{"text": "✅ Analizuoti bylą", "callback_data": "analyze_case"}],
+            [{"text": "⚖️ Bylos analizė", "callback_data": "analyze_case"}],
+            [{"text": TEXT[lang]["generate_doc"], "callback_data": "show_docs"}],
+            [{"text": TEXT[lang]["ask_question"], "callback_data": "ask_question"}],
             [{"text": TEXT[lang]["my_cases"], "callback_data": "case_list"}],
             [{"text": TEXT[lang]["new_case"], "callback_data": "new_case"}],
         ]}
     if lang == "no":
         return {"inline_keyboard": [
             [{"text": "📂 Saksdokumenter", "callback_data": "case_docs"}],
-            [{"text": "✅ Analyser saken", "callback_data": "analyze_case"}],
+            [{"text": "⚖️ Saksanalyse", "callback_data": "analyze_case"}],
+            [{"text": TEXT[lang]["generate_doc"], "callback_data": "show_docs"}],
+            [{"text": TEXT[lang]["ask_question"], "callback_data": "ask_question"}],
             [{"text": TEXT[lang]["my_cases"], "callback_data": "case_list"}],
             [{"text": TEXT[lang]["new_case"], "callback_data": "new_case"}],
         ]}
     return {"inline_keyboard": [
         [{"text": "📂 Case documents", "callback_data": "case_docs"}],
-        [{"text": "✅ Analyze case", "callback_data": "analyze_case"}],
+        [{"text": "⚖️ Case analysis", "callback_data": "analyze_case"}],
+        [{"text": TEXT[lang]["generate_doc"], "callback_data": "show_docs"}],
+        [{"text": TEXT[lang]["ask_question"], "callback_data": "ask_question"}],
         [{"text": TEXT[lang]["my_cases"], "callback_data": "case_list"}],
         [{"text": TEXT[lang]["new_case"], "callback_data": "new_case"}],
     ]}
+
+
+def file_action_menu(lang: str):
+    return open_case_menu(lang)
+
 
 def detect_case_type(case_text: str) -> str:
     text = (case_text or "").lower()
@@ -536,6 +550,7 @@ def normalize_case_answer(text: str) -> str:
     if not text:
         return text
     text = text.strip()
+    text = text.replace("**", "")
     headings = [
         "🆔 Bylos numeris", "📋 Situacija", "⚖️ Galimai taikytini teisės aktai",
         "🎯 Rekomenduojami veiksmai", "📄 Galimi dokumentai", "📄 Rekomenduojami dokumentai",
@@ -546,6 +561,12 @@ def normalize_case_answer(text: str) -> str:
     ]
     for h in headings:
         text = re.sub(r"\s*" + re.escape(h), "\n\n" + h, text)
+    text = re.sub(r"(?m)^🆔 Bylos numeris\s*\n\s*(CASE-[^\n]+)", r"🆔 Bylos Nr.: \1", text)
+    text = re.sub(r"(?m)^🆔 Case number\s*\n\s*(CASE-[^\n]+)", r"🆔 Case No.: \1", text)
+    text = re.sub(r"(?m)^🆔 Saksnummer\s*\n\s*(CASE-[^\n]+)", r"🆔 Saksnr.: \1", text)
+    text = text.replace("📌 Konkreti dalis", "Konkreti norma")
+    text = text.replace("📊 Atitikimas", "Atitikties įvertinimas")
+    text = text.replace("📄 Atitinkanti bylos dalis", "Bylos faktai")
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
@@ -556,9 +577,11 @@ def sanitize_generated_document(text: str) -> str:
     text = re.sub(r"^\s*(Sukūrė|Sukure|Created by|Opprettet av)\s+Justice AI\s*\n+", "", text, flags=re.IGNORECASE)
     text = re.sub(r"(?im)^\s*(ID|Asmens kodas|Personnummer|Fødselsnummer)\s*:\s*.*\n?", "", text)
     text = re.sub(r"\[[^\]]+\]", "", text)
+    text = text.replace("**", "")
     text = re.sub(r"(?im)^\s*(El\.?\s*paštas|E-?post|Email|Telefonas|Phone|Telefon|Adresas|Address)\s*:\s*$\n?", "", text)
     text = text.replace("Remiantis Straffeloven §371", "Galimai aktualus Straffeloven §371")
     text = text.replace("Remiantis Straffeloven", "Galimai aktualus Straffeloven")
+    text = re.sub(r"(?im)^\s*Justice AI\s*$\n?", "", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
@@ -839,13 +862,16 @@ BŪTINAS FORMATAS:
 
 1. [teisės aktas]
 
-📌 Konkreti dalis
+Konkreti norma:
 ...
 
-📊 Atitikimas
-Tiesioginis / stiprus / galimas atitikimas (procentas)
+Atitikties įvertinimas:
+... %
 
-📄 Atitinkanti bylos dalis
+Byloje nustatyta:
+...
+
+Kodėl taikoma:
 ...
 
 🎯 Rekomenduojami veiksmai
@@ -865,7 +891,7 @@ Taisyklės:
 - Nenaudok vientiso sulipusio teksto bloko.
 - Teisės aktų skyriuje naudok tik fiksuotą sąrašą žemiau.
 - Negeneruok kitų straipsnių ar paragrafų, kurių nėra fiksuotame sąraše.
-- Kiekvienam teisės aktui privalomai nurodyk konkrečią dalį/punktą, atitikimo lygį, procentą ir bylos faktą.
+- Kiekvienam teisės aktui trumpai nurodyk konkrečią normą, atitikties įvertinimą procentais, byloje nustatytą faktą ir kodėl norma gali būti taikoma.
 - Neteik kategoriško teiginio, kad nusikaltimas įvykdytas. Naudok: „galimai taikytina“, „gali būti aktualu“, „gali būti vertinama pagal“.
 - „Galimi dokumentai“ vadink „Rekomenduojami dokumentai“ ir nurodyk dokumentus, kuriuos galima sugeneruoti, ne techninius failų pavadinimus.
 
@@ -950,6 +976,20 @@ def document_name(doc_type: str, lang: str) -> str:
         },
     }
     return names.get(lang, names["en"]).get(doc_type, "document")
+
+
+def document_output_lang(country: str, doc_type: str, interface_lang: str) -> str:
+    """
+    Document language follows the main recipient jurisdiction.
+    Telegram UI language can remain different from the official document language.
+    """
+    if country == "no" and doc_type in {"appeal_police_decision", "fraud_report", "bank_refund", "authority_complaint", "seller_claim"}:
+        return "no"
+    if country == "uk":
+        return "en"
+    if country == "lt":
+        return "lt"
+    return interface_lang if interface_lang in ("lt", "no", "en") else "en"
 
 
 def jurisdiction_recipient_hint(country: str, doc_type: str, lang: str) -> str:
@@ -1223,7 +1263,8 @@ def generate_document_for_state(chat_id: int, state: dict, lang: str, doc_type: 
     full_text = (state.get("case_text") or "")
     if state.get("doc_extra_data"):
         full_text += "\n\n--- PAPILDOMI DUOMENYS DOKUMENTUI / ADDITIONAL DOCUMENT DETAILS ---\n" + state.get("doc_extra_data", "")
-    answer = openai_request(build_doc_prompt(full_text, lang, state.get("country") or "lt", doc_type), lang)
+    doc_lang = document_output_lang(state.get("country") or "lt", doc_type, lang)
+    answer = openai_request(build_doc_prompt(full_text, doc_lang, state.get("country") or "lt", doc_type), doc_lang)
     if not answer:
         err = "⚠️ Dokumento šiuo metu nepavyko paruošti. Bandykite dar kartą po kelių minučių." if lang == "lt" else "⚠️ The document could not be prepared right now. Please try again in a few minutes."
         send_message(chat_id, err)
@@ -1278,10 +1319,17 @@ def show_case_list(chat_id: int, lang: str):
     for c in cases:
         case_id = c.get("id")
         case_number = c.get("case_number") or f"CASE-{case_id}"
-        title = (c.get("title") or "").replace("\n", " ").strip()
-        if len(title) > 36:
-            title = title[:33] + "..."
-        button_text = f"{case_number} — {title}" if title else str(case_number)
+        files_count = len(db_list_case_files(case_id))
+        created_at = str(c.get("created_at") or "")[:10]
+        if lang == "lt":
+            suffix = f"{files_count} dok."
+        elif lang == "no":
+            suffix = f"{files_count} dok."
+        else:
+            suffix = f"{files_count} docs"
+        button_text = f"{case_number} · {suffix}"
+        if created_at:
+            button_text += f" · {created_at}"
         rows.append([{"text": button_text, "callback_data": f"select_case_{case_id}"}])
     rows.append([{"text": TEXT[lang]["new_case"], "callback_data": "new_case"}])
     send_message(chat_id, case_list_title(lang), reply_markup={"inline_keyboard": rows})
@@ -1304,7 +1352,7 @@ def load_case_into_state(chat_id: int, state: dict, lang: str, case_id: int):
         "files": files,
         "upload_menu_sent": False,
     })
-    send_message(chat_id, case_loaded_text(lang, state.get("case_number")), reply_markup=file_action_menu(lang))
+    send_message(chat_id, case_loaded_text(lang, state.get("case_number")), reply_markup=closed_case_menu(lang))
 
 
 def build_followup_prompt(case_text: str, question: str, lang: str, country: str):
@@ -1530,7 +1578,7 @@ def handle_file(chat_id: int, msg: dict):
         return
 
     if not state.get("upload_menu_sent"):
-        send_message(chat_id, status_text, reply_markup=file_action_menu(lang))
+        send_message(chat_id, status_text, reply_markup=open_case_menu(lang))
         state["upload_menu_sent"] = True
     else:
         # Subsequent files are added silently to avoid repeated messages.
@@ -1574,10 +1622,10 @@ def telegram_webhook():
                 active, until = db_subscription_active(chat_id)
                 if active:
                     send_message(chat_id, f"{TEXT[lang]['active_until']} {until.date()}")
-                    if state.get("case_id") and state.get("case_text"):
-                        send_message(chat_id, "✅ Galite tęsti aktyvią bylą." if lang == "lt" else ("✅ Du kan fortsette den aktive saken." if lang == "no" else "✅ You can continue the active case."), reply_markup=file_action_menu(lang))
-                    else:
+                    cases = db_list_cases(chat_id, limit=1)
+                    if cases:
                         show_case_list(chat_id, lang)
+                    else:
                         show_collect_case(chat_id)
                 else:
                     send_subscription_required(chat_id, lang)
@@ -1620,10 +1668,22 @@ def telegram_webhook():
                 except Exception:
                     show_case_list(chat_id, lang)
 
+            elif data == "open_case":
+                if not state.get("case_id"):
+                    show_case_list(chat_id, lang)
+                else:
+                    if lang == "lt":
+                        msg_text = f"📂 Byla atverta.\n\n🆔 Bylos Nr.: {state.get('case_number') or ''}"
+                    elif lang == "no":
+                        msg_text = f"📂 Saken er åpnet.\n\n🆔 Saksnr.: {state.get('case_number') or ''}"
+                    else:
+                        msg_text = f"📂 Case opened.\n\n🆔 Case No.: {state.get('case_number') or ''}"
+                    send_message(chat_id, msg_text, reply_markup=open_case_menu(lang))
+
             elif data == "upload_more":
                 # Legacy callback kept for old Telegram messages. New menus no longer show this button.
                 if lang == "lt":
-                    send_message(chat_id, "📎 Dokumentą galite pridėti per Telegram prisegimo ikoną.", reply_markup=file_action_menu(lang))
+                    send_message(chat_id, "📎 Dokumentą galite pridėti per Telegram prisegimo ikoną.", reply_markup=open_case_menu(lang))
                 elif lang == "no":
                     send_message(chat_id, "📎 Du kan legge til dokumenter med vedlegg-ikonet i Telegram.", reply_markup=file_action_menu(lang))
                 else:
@@ -1667,15 +1727,7 @@ def telegram_webhook():
                     send_message(chat_id, TEXT[lang]["no_case"])
                 else:
                     doc_type = data.replace("doc_", "")
-                    full_text = state.get('case_text') or ""
-                    check = openai_request(build_doc_missing_prompt(full_text, lang, state.get("country") or "lt", doc_type), lang)
-                    missing = parse_missing_doc_questions(check)
-                    if missing:
-                        state["awaiting_doc_details"] = True
-                        state["pending_doc_type"] = doc_type
-                        send_message(chat_id, missing_doc_message(lang, missing))
-                    else:
-                        generate_document_for_state(chat_id, state, lang, doc_type)
+                    generate_document_for_state(chat_id, state, lang, doc_type)
 
             return jsonify({"ok": True})
 
@@ -1727,7 +1779,11 @@ def telegram_webhook():
                         until = db_set_subscription(chat_id, plan_key, plan["months"], plan["stars"])
                         send_message(chat_id, f"{TEXT[lang]['access_active']}\n{TEXT[lang]['active_until']} {until.date()}")
                         reset_current_case(state)
-                        show_collect_case(chat_id)
+                        cases = db_list_cases(chat_id, limit=1)
+                        if cases:
+                            show_case_list(chat_id, lang)
+                        else:
+                            show_collect_case(chat_id)
                 return jsonify({"ok": True})
 
             if msg.get("document") or msg.get("photo"):
