@@ -299,6 +299,7 @@ def get_state(chat_id: int) -> dict:
             "files": [],
             "upload_menu_sent": False,
             "rating_asked": False,
+            "last_view_key": None,
         }
     return USER_STATES[chat_id]
 
@@ -311,6 +312,17 @@ def send_message(chat_id: int, text: str, reply_markup: dict | None = None):
     if not r.ok:
         logger.error("Telegram send error: %s %s", r.status_code, r.text)
     return r.json() if r.ok else None
+
+
+def send_view_message(chat_id: int, view_key: str, text: str, reply_markup: dict | None = None):
+    """Send a screen/menu only once while the same view is already visible.
+    This keeps Telegram clean when users press the same inline button repeatedly.
+    """
+    state = get_state(chat_id)
+    if state.get("last_view_key") == view_key:
+        return None
+    state["last_view_key"] = view_key
+    return send_message(chat_id, text, reply_markup)
 
 
 def send_chunks(chat_id: int, text: str, reply_markup: dict | None = None):
@@ -736,6 +748,19 @@ def db_list_case_files(case_id: int):
     except Exception as e:
         logger.warning("Case file list failed: %s", e)
         return []
+
+
+def db_delete_case(case_id: int, telegram_id: int) -> bool:
+    try:
+        case = db_get_case(case_id, telegram_id)
+        if not case:
+            return False
+        supabase.table("case_files").delete().eq("case_id", case_id).execute()
+        supabase.table("cases").delete().eq("id", case_id).eq("telegram_id", telegram_id).execute()
+        return True
+    except Exception as e:
+        logger.warning("Case delete failed: %s", e)
+        return False
 
 
 def extract_text_from_file(file_name: str, file_bytes: bytes) -> str:
@@ -1267,6 +1292,13 @@ def rating_thanks(lang: str) -> str:
 def maybe_request_rating(chat_id: int, state: dict, lang: str):
     if state.get("rating_asked"):
         return
+    try:
+        user = db_user_get(chat_id)
+        if user and (user.get("rating") or user.get("rating_date")):
+            state["rating_asked"] = True
+            return
+    except Exception:
+        pass
     state["rating_asked"] = True
     send_message(chat_id, rating_prompt(lang), reply_markup=rating_menu(lang))
 
@@ -1335,17 +1367,27 @@ def case_loaded_text(lang: str, case_number: str | None) -> str:
 def show_case_list(chat_id: int, lang: str):
     cases = db_list_cases(chat_id, limit=10)
     if not cases:
-        send_message(chat_id, no_saved_cases_text(lang), reply_markup={"inline_keyboard": [[{"text": TEXT[lang]["new_case"], "callback_data": "new_case"}]]})
+        send_view_message(
+            chat_id,
+            "case_list_empty",
+            no_saved_cases_text(lang),
+            reply_markup={"inline_keyboard": [[{"text": TEXT[lang]["new_case"], "callback_data": "new_case"}]]},
+        )
         return
 
     rows = []
+    case_ids = []
     for c in cases:
         case_id = c.get("id")
+        case_ids.append(str(case_id))
         case_number = c.get("case_number") or f"CASE-{case_id}"
-        button_text = str(case_number)
-        rows.append([{"text": button_text, "callback_data": f"select_case_{case_id}"}])
+        rows.append([
+            {"text": str(case_number), "callback_data": f"select_case_{case_id}"},
+            {"text": "🗑️", "callback_data": f"delete_case_{case_id}"},
+        ])
     rows.append([{"text": TEXT[lang]["new_case"], "callback_data": "new_case"}])
-    send_message(chat_id, case_list_title(lang), reply_markup={"inline_keyboard": rows})
+    view_key = "case_list:" + ",".join(case_ids)
+    send_view_message(chat_id, view_key, case_list_title(lang), reply_markup={"inline_keyboard": rows})
 
 
 def open_case_text(lang: str, case_number: str | None, files_count: int) -> str:
@@ -1374,7 +1416,8 @@ def load_case_into_state(chat_id: int, state: dict, lang: str, case_id: int):
         "upload_menu_sent": False,
         "rating_asked": False,
     })
-    send_message(chat_id, open_case_text(lang, state.get("case_number"), len(files)), reply_markup=file_action_menu(lang))
+    view_key = f"open_case:{case_id}:{len(files)}"
+    send_view_message(chat_id, view_key, open_case_text(lang, state.get("case_number"), len(files)), reply_markup=file_action_menu(lang))
 
 
 def build_followup_prompt(case_text: str, question: str, lang: str, country: str):
@@ -1419,6 +1462,7 @@ def show_start(chat_id: int, tg_user: dict):
         "files": [],
         "upload_menu_sent": False,
         "rating_asked": False,
+        "last_view_key": None,
     })
     db_user_upsert(tg_user, lang)
     start_text = f"{welcome_text(lang)}\n\n{SAFETY_TEXT[lang]}"
@@ -1431,7 +1475,7 @@ def show_country(chat_id: int):
 
 def show_collect_case(chat_id: int):
     state = get_state(chat_id)
-    send_message(chat_id, TEXT[state["lang"]]["collect_case"])
+    send_view_message(chat_id, "collect_case", TEXT[state["lang"]]["collect_case"])
 
 
 def reset_current_case(state: dict):
@@ -1448,6 +1492,7 @@ def reset_current_case(state: dict):
         "files": [],
         "upload_menu_sent": False,
         "rating_asked": False,
+        "last_view_key": None,
     })
 
 
@@ -1475,6 +1520,7 @@ def create_case_from_text(chat_id: int, user_text: str):
         "files": [],
         "upload_menu_sent": False,
         "rating_asked": False,
+        "last_view_key": None,
     })
     send_message(chat_id, TEXT[lang]["case_created"].format(case_number=case_number))
 
@@ -1550,6 +1596,7 @@ def handle_file(chat_id: int, msg: dict):
             "files": [],
             "upload_menu_sent": False,
             "rating_asked": False,
+            "last_view_key": None,
         })
         created_now = True
 
@@ -1696,11 +1743,52 @@ def telegram_webhook():
                 except Exception:
                     show_case_list(chat_id, lang)
 
+            elif data.startswith("delete_case_"):
+                try:
+                    delete_case_id = int(data.replace("delete_case_", ""))
+                    case = db_get_case(delete_case_id, chat_id)
+                    if not case:
+                        show_case_list(chat_id, lang)
+                    else:
+                        case_number = case.get("case_number") or f"CASE-{delete_case_id}"
+                        if lang == "lt":
+                            text_del = f"🗑️ Ištrinti bylą {case_number}?"
+                            yes = "Taip, ištrinti"
+                            no = "Atšaukti"
+                        elif lang == "no":
+                            text_del = f"🗑️ Slette saken {case_number}?"
+                            yes = "Ja, slett"
+                            no = "Avbryt"
+                        else:
+                            text_del = f"🗑️ Delete case {case_number}?"
+                            yes = "Yes, delete"
+                            no = "Cancel"
+                        send_message(chat_id, text_del, reply_markup={"inline_keyboard": [
+                            [{"text": yes, "callback_data": f"confirm_delete_case_{delete_case_id}"}],
+                            [{"text": no, "callback_data": "case_list"}],
+                        ]})
+                except Exception:
+                    show_case_list(chat_id, lang)
+
+            elif data.startswith("confirm_delete_case_"):
+                try:
+                    delete_case_id = int(data.replace("confirm_delete_case_", ""))
+                    ok = db_delete_case(delete_case_id, chat_id)
+                    if state.get("case_id") == delete_case_id:
+                        reset_current_case(state)
+                    state["last_view_key"] = None
+                    if ok:
+                        send_message(chat_id, "✅ Byla ištrinta." if lang == "lt" else ("✅ Saken er slettet." if lang == "no" else "✅ Case deleted."))
+                    show_case_list(chat_id, lang)
+                except Exception:
+                    show_case_list(chat_id, lang)
+
             elif data == "open_case":
                 if not state.get("case_text"):
                     send_message(chat_id, TEXT[lang]["no_case"])
                 else:
-                    send_message(chat_id, open_case_text(lang, state.get("case_number"), len(state.get("files") or [])), reply_markup=file_action_menu(lang))
+                    view_key = f"open_case:{state.get('case_id')}:{len(state.get('files') or [])}"
+                    send_view_message(chat_id, view_key, open_case_text(lang, state.get("case_number"), len(state.get("files") or [])), reply_markup=file_action_menu(lang))
 
             elif data.startswith("rating_"):
                 rating_value = data.replace("rating_", "")
