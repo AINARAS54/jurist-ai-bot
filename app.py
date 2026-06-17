@@ -167,7 +167,7 @@ TEXT = {
         "generate_doc": "📄 Generuoti dokumentą",
         "new_case": "➕ Nauja byla",
         "my_cases": "📁 Mano bylos",
-        "new_case_started": "➕ Pradėkime naują bylą. Ankstesnės bylos lieka išsaugotos ir jas galėsite tęsti vėliau.",
+        "new_case_started": "➕ Nauja byla",
         "ask_prompt": "❓ Parašykite papildomą klausimą dėl šios bylos.",
         "choose_doc": "📄 Pasirinkite generuoti:",
         "no_case": "Pirmiausia aprašykite situaciją arba įkelkite dokumentą.",
@@ -192,7 +192,7 @@ TEXT = {
         "generate_doc": "📄 Generate document",
         "new_case": "➕ New case",
         "my_cases": "📁 My cases",
-        "new_case_started": "➕ Let us start a new case. Previous cases remain saved and can be continued later.",
+        "new_case_started": "➕ New case",
         "ask_prompt": "❓ Write your follow-up question about this case.",
         "choose_doc": "📄 Select to generate:",
         "no_case": "Please describe the situation or upload a document first.",
@@ -217,7 +217,7 @@ TEXT = {
         "generate_doc": "📄 Generer dokument",
         "new_case": "➕ Ny sak",
         "my_cases": "📁 Mine saker",
-        "new_case_started": "➕ La oss starte en ny sak. Tidligere saker lagres og kan fortsettes senere.",
+        "new_case_started": "➕ Ny sak",
         "ask_prompt": "❓ Skriv oppfølgingsspørsmålet ditt om denne saken.",
         "choose_doc": "📄 Velg å generere:",
         "no_case": "Beskriv situasjonen eller last opp et dokument først.",
@@ -1342,13 +1342,18 @@ def show_case_list(chat_id: int, lang: str):
     for c in cases:
         case_id = c.get("id")
         case_number = c.get("case_number") or f"CASE-{case_id}"
-        title = (c.get("title") or "").replace("\n", " ").strip()
-        if len(title) > 36:
-            title = title[:33] + "..."
-        button_text = f"{case_number} — {title}" if title else str(case_number)
+        button_text = str(case_number)
         rows.append([{"text": button_text, "callback_data": f"select_case_{case_id}"}])
     rows.append([{"text": TEXT[lang]["new_case"], "callback_data": "new_case"}])
     send_message(chat_id, case_list_title(lang), reply_markup={"inline_keyboard": rows})
+
+
+def open_case_text(lang: str, case_number: str | None, files_count: int) -> str:
+    if lang == "lt":
+        return f"📂 Byla atverta\n\n🆔 Bylos Nr.: {case_number or ''}\n📄 Dokumentų: {files_count}"
+    if lang == "no":
+        return f"📂 Saken er åpnet\n\n🆔 Saksnr.: {case_number or ''}\n📄 Dokumenter: {files_count}"
+    return f"📂 Case opened\n\n🆔 Case No.: {case_number or ''}\n📄 Documents: {files_count}"
 
 
 def load_case_into_state(chat_id: int, state: dict, lang: str, case_id: int):
@@ -1369,7 +1374,7 @@ def load_case_into_state(chat_id: int, state: dict, lang: str, case_id: int):
         "upload_menu_sent": False,
         "rating_asked": False,
     })
-    send_message(chat_id, case_loaded_text(lang, state.get("case_number")), reply_markup=case_closed_menu(lang))
+    send_message(chat_id, open_case_text(lang, state.get("case_number"), len(files)), reply_markup=file_action_menu(lang))
 
 
 def build_followup_prompt(case_text: str, question: str, lang: str, country: str):
@@ -1453,7 +1458,6 @@ def start_new_case(chat_id: int, state: dict, lang: str):
         send_subscription_required(chat_id, lang)
         return
     reset_current_case(state)
-    send_message(chat_id, TEXT[lang]["new_case_started"])
     show_collect_case(chat_id)
 
 
@@ -1696,13 +1700,7 @@ def telegram_webhook():
                 if not state.get("case_text"):
                     send_message(chat_id, TEXT[lang]["no_case"])
                 else:
-                    if lang == "lt":
-                        msg_text = f"📂 Byla atverta\n\n🆔 Bylos Nr.: {state.get('case_number') or ''}\n📄 Dokumentų: {len(state.get('files') or [])}"
-                    elif lang == "no":
-                        msg_text = f"📂 Saken er åpnet\n\n🆔 Saksnr.: {state.get('case_number') or ''}\n📄 Dokumenter: {len(state.get('files') or [])}"
-                    else:
-                        msg_text = f"📂 Case opened\n\n🆔 Case No.: {state.get('case_number') or ''}\n📄 Documents: {len(state.get('files') or [])}"
-                    send_message(chat_id, msg_text, reply_markup=file_action_menu(lang))
+                    send_message(chat_id, open_case_text(lang, state.get("case_number"), len(state.get("files") or [])), reply_markup=file_action_menu(lang))
 
             elif data.startswith("rating_"):
                 rating_value = data.replace("rating_", "")
@@ -1716,20 +1714,20 @@ def telegram_webhook():
             elif data == "upload_more":
                 # Legacy callback kept for old Telegram messages. New menus no longer show this button.
                 if lang == "lt":
-                    send_message(chat_id, "📎 Dokumentą galite pridėti per Telegram prisegimo ikoną.", reply_markup=file_action_menu(lang))
+                    send_message(chat_id, "📎 Dokumentą galite pridėti per Telegram prisegimo ikoną.")
                 elif lang == "no":
-                    send_message(chat_id, "📎 Du kan legge til dokumenter med vedlegg-ikonet i Telegram.", reply_markup=file_action_menu(lang))
+                    send_message(chat_id, "📎 Du kan legge til dokumenter med vedlegg-ikonet i Telegram.")
                 else:
-                    send_message(chat_id, "📎 You can add documents using the Telegram attachment icon.", reply_markup=file_action_menu(lang))
+                    send_message(chat_id, "📎 You can add documents using the Telegram attachment icon.")
 
             elif data == "case_docs":
                 files = state.get("files") or []
                 if not files:
-                    send_message(chat_id, "📂 Bylos dokumentų dar nėra." if lang == "lt" else "📂 No case documents yet.", reply_markup=file_action_menu(lang))
+                    send_message(chat_id, "📂 Bylos dokumentų dar nėra." if lang == "lt" else ("📂 Ingen saksdokumenter ennå." if lang == "no" else "📂 No case documents yet."))
                 else:
                     lines = [f"{i + 1}. {name}" for i, name in enumerate(files)]
                     title = "📂 Bylos dokumentai:" if lang == "lt" else ("📂 Saksdokumenter:" if lang == "no" else "📂 Case documents:")
-                    send_message(chat_id, title + "\n\n" + "\n".join(lines), reply_markup=file_action_menu(lang))
+                    send_message(chat_id, title + "\n\n" + "\n".join(lines))
 
             elif data == "analyze_case":
                 if not state.get("case_text"):
@@ -1857,11 +1855,11 @@ def telegram_webhook():
                     state["case_text"] = (state.get("case_text") or "") + f"\n\n--- PAPILDOMA VARTOTOJO INFORMACIJA ---\n{text}"
                     db_update_case(state["case_id"], state["case_text"])
                     if lang == "lt":
-                        send_message(chat_id, "✅ Informacija pridėta prie bylos.", reply_markup=file_action_menu(lang))
+                        send_message(chat_id, "✅ Informacija pridėta prie bylos.")
                     elif lang == "no":
-                        send_message(chat_id, "✅ Informasjonen er lagt til saken.", reply_markup=file_action_menu(lang))
+                        send_message(chat_id, "✅ Informasjonen er lagt til saken.")
                     else:
-                        send_message(chat_id, "✅ Information added to the case.", reply_markup=file_action_menu(lang))
+                        send_message(chat_id, "✅ Information added to the case.")
                 else:
                     create_case_from_text(chat_id, text)
 
