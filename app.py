@@ -80,6 +80,10 @@ Style:
 - Do not repeat the same URL. If a Google Drive or other link is included, show it only once.
 
 Rules:
+- Copy all personal data, email addresses, phone numbers, addresses, case numbers, dates, document numbers, wallet addresses, bank accounts, TXIDs and other identifiers exactly as they appear in the case.
+- Never modify, correct, shorten, normalize or guess identifying data.
+- Copy email addresses character by character. Do not add or remove dots, letters, numbers, uppercase or lowercase characters.
+- If a data point is unclear or missing from the case, do not invent or alter it; omit it or ask for clarification.
 - Do not claim to be a lawyer.
 - Do not suggest consulting lawyers or external specialists.
 - Provide practical next steps yourself.
@@ -1058,6 +1062,10 @@ Bylos tipas pagal turinį: {case_type}.
 Adresato parinkimo gairė: {recipient_hint}
 
 Svarbiausios taisyklės:
+- Visi asmens duomenys, el. pašto adresai, telefono numeriai, adresai, bylos numeriai, datos, dokumentų numeriai, wallet adresai, banko sąskaitos, TXID ir kiti identifikaciniai duomenys turi būti perkelti tiksliai taip, kaip pateikti byloje.
+- Griežtai nekeisk, netaisyk, netrumpink, nenormalizuok ir nespėk identifikacinių duomenų.
+- El. pašto adresus kopijuok simbolis į simbolį. Nekeisk taškų, raidžių, skaičių, didžiųjų ar mažųjų raidžių.
+- Jei duomuo neaiškus arba jo nėra byloje, jo nesugalvok ir nepakeisk; geriau praleisk arba paprašyk patikslinti.
 - Dokumentą generuok iš realios bylos informacijos ir iš įkeltų failų nuskaityto teksto.
 - Jei PDF / bylos tekste yra vardas, pavardė, adresas, el. paštas, telefonas, data, suma, platforma, įmonė, bankas, pavedimų duomenys ar kiti faktai, įrašyk juos į dokumentą automatiškai.
 - Nenaudok tuščių laukų [Vardas Pavardė], [Adresas], [El. paštas], [Telefonas], [Data], jei duomenys jau randami byloje.
@@ -1307,11 +1315,68 @@ def rating_thanks(lang: str) -> str:
     return "Thank you for your rating 🙏"
 
 
+def db_rating_given(telegram_id: int) -> bool:
+    try:
+        user = db_user_get(telegram_id)
+        if not user:
+            return False
+        if user.get("rating_given") is True:
+            return True
+        if user.get("rating") is not None:
+            return True
+        if user.get("rating_date"):
+            return True
+    except Exception as e:
+        logger.info("Rating status check failed: %s", e)
+    return False
+
+
+def db_save_rating(telegram_id: int, rating_value: int):
+    payload = {"rating": rating_value, "rating_given": True, "rating_date": iso(now_utc())}
+    try:
+        supabase.table("users").update(payload).eq("telegram_id", telegram_id).execute()
+        return
+    except Exception as e:
+        logger.info("Rating_given column may be missing, retrying without it: %s", e)
+    try:
+        supabase.table("users").update({"rating": rating_value, "rating_date": iso(now_utc())}).eq("telegram_id", telegram_id).execute()
+    except Exception as e:
+        logger.info("Rating was stored only in memory: %s", e)
+
+
 def maybe_request_rating(chat_id: int, state: dict, lang: str):
-    if state.get("rating_asked"):
+    if state.get("rating_asked") or db_rating_given(chat_id):
         return
     state["rating_asked"] = True
     send_message(chat_id, rating_prompt(lang), reply_markup=rating_menu(lang))
+
+
+EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+
+
+def _email_key(email: str) -> tuple[str, str]:
+    local, _, domain = email.lower().partition("@")
+    return local.replace(".", ""), domain
+
+
+def enforce_exact_source_emails(generated_text: str, source_text: str) -> str:
+    """Preserve exact user-provided email spelling in generated documents."""
+    if not generated_text or not source_text:
+        return generated_text
+    source_emails = []
+    for email in EMAIL_RE.findall(source_text):
+        if email not in source_emails:
+            source_emails.append(email)
+    if not source_emails:
+        return generated_text
+    by_key = {_email_key(email): email for email in source_emails}
+
+    def repl(match):
+        found = match.group(0)
+        exact = by_key.get(_email_key(found))
+        return exact if exact else found
+
+    return EMAIL_RE.sub(repl, generated_text)
 
 
 def strip_markdown_artifacts(text: str) -> str:
@@ -1348,6 +1413,7 @@ def generate_document_for_state(chat_id: int, state: dict, lang: str, doc_type: 
         return
     answer = sanitize_generated_document(answer)
     answer = strip_markdown_artifacts(answer)
+    answer = enforce_exact_source_emails(answer, full_text)
     send_chunks(chat_id, answer, reply_markup=after_full_menu(lang))
     maybe_request_rating(chat_id, state, lang)
 
@@ -1816,12 +1882,10 @@ def telegram_webhook():
                     send_message(chat_id, open_case_text(lang, state.get("case_number"), len(state.get("files") or [])), reply_markup=file_action_menu(lang))
 
             elif data.startswith("rating_"):
-                rating_value = data.replace("rating_", "")
+                rating_value = int(data.replace("rating_", ""))
                 state["rating"] = rating_value
-                try:
-                    supabase.table("users").update({"rating": int(rating_value), "rating_date": iso(now_utc())}).eq("telegram_id", chat_id).execute()
-                except Exception as e:
-                    logger.info("Rating was stored only in memory: %s", e)
+                state["rating_asked"] = True
+                db_save_rating(chat_id, rating_value)
                 send_message(chat_id, rating_thanks(lang))
 
             elif data == "upload_more":
