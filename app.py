@@ -378,6 +378,15 @@ def after_full_menu(lang: str):
     ]}
 
 
+
+
+def post_document_menu(lang: str):
+    return {"inline_keyboard": [
+        [{"text": "📂 Bylos dokumentai" if lang == "lt" else ("📂 Saksdokumenter" if lang == "no" else "📂 Case documents"), "callback_data": "case_docs"}],
+        [{"text": TEXT[lang]["my_cases"], "callback_data": "case_list"}],
+        [{"text": TEXT[lang]["new_case"], "callback_data": "new_case"}],
+    ]}
+
 def case_closed_menu(lang: str):
     if lang == "lt":
         open_text = "📂 Atverti bylą"
@@ -576,6 +585,8 @@ def sanitize_generated_document(text: str) -> str:
     text = text.replace("**", "")
     text = re.sub(r"(?im)^\s*Google Drive\s*:\s*https?://\S+\s*$\n?", "", text)
     text = re.sub(r"(?im)^\s*Full dokumentasjon.*Google Drive.*$\n?", "", text)
+    text = re.sub(r"(?im)^\s*Full dokumentasjon.*tilgjengelig her:\s*$\n?", "", text)
+    text = re.sub(r"(?im)^\s*Full dokumentasjon og bevismateriale er tilgjengelig her:\s*$\n?", "", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
@@ -1414,7 +1425,8 @@ def generate_document_for_state(chat_id: int, state: dict, lang: str, doc_type: 
     answer = sanitize_generated_document(answer)
     answer = strip_markdown_artifacts(answer)
     answer = enforce_exact_source_emails(answer, full_text)
-    send_chunks(chat_id, answer, reply_markup=after_full_menu(lang))
+    # Po dokumento sugeneravimo neberodome mygtuko „Generuoti dokumentą“ dar kartą.
+    send_chunks(chat_id, answer, reply_markup=post_document_menu(lang))
     maybe_request_rating(chat_id, state, lang)
 
 def case_list_title(lang: str) -> str:
