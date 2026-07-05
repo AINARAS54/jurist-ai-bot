@@ -1107,6 +1107,7 @@ Svarbiausios taisyklės:
 - Pareiškėjo paraše rodyk tik tuos kontaktus, kurie aiškiai priklauso pareiškėjui. Jei abejoji, telefono ir el. pašto nerodyk.
 - Vardą ir pavardę formatuok natūraliai: „Ainaras Kalnenas“, ne „Ainaras KALNENAS“.
 - Niekada automatiškai nepridėk ID / asmens kodo / fødselsnummer eilutės, nebent vartotojas aiškiai paprašė.
+- El. pašto adresų, telefono numerių, adresų, bylos numerių, wallet adresų, TXID, banko sąskaitų ir kitų identifikacinių duomenų niekada nekeisk, netaisyk, netrumpink ir neformatuok. Perkelk juos simbolis į simbolį tiksliai taip, kaip jie pateikti byloje.
 
 Fiksuoti teisės aktai ir atitikimo logika:
 {legal_block}
@@ -1153,6 +1154,7 @@ Rules:
 - In the claimant signature, include only contact details that clearly belong to the claimant. If unsure, omit phone and email.
 - Format claimant names naturally, for example “Ainaras Kalnenas”, not “Ainaras KALNENAS”.
 - Never automatically add ID / personal number / fødselsnummer unless the user explicitly asked for it.
+- Never change, correct, shorten, normalize or reformat email addresses, phone numbers, addresses, case numbers, wallet addresses, TXIDs, bank accounts or other identifying data. Copy them character by character exactly as they appear in the case.
 
 Fixed legal references and matching logic:
 {legal_block}
@@ -1252,6 +1254,38 @@ def missing_doc_message(lang: str, questions: str) -> str:
     if lang == "no":
         return "📋 Dokumentet mangler noen viktige opplysninger:\n\n" + questions + "\n\nSvar i én melding."
     return "📋 The document is missing a few important details:\n\n" + questions + "\n\nReply in one message."
+
+def source_has_contact_identity(source_text: str) -> bool:
+    """Return True when the case text already contains enough claimant identity/contact data.
+    This prevents asking again for name/email when the information is already in the case.
+    """
+    source_text = source_text or ""
+    has_email = bool(re.search(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}", source_text))
+    # Simple name detector: two capitalized words. Works for Lithuanian/Norwegian/English names in extracted text.
+    has_name = bool(re.search(r"\b[A-ZĄČĘĖĮŠŲŪŽÆØÅ][a-ząčęėįšųūžæøå]+\s+[A-ZĄČĘĖĮŠŲŪŽÆØÅ][a-ząčęėįšųūžæøå]+\b", source_text))
+    return has_email or has_name
+
+
+def remove_unresolved_placeholder_lines(text: str) -> str:
+    """Remove unresolved placeholder/instruction lines instead of asking the user again.
+    Legal documents should be usable even if non-essential contact details are missing.
+    """
+    if not text:
+        return text
+    cleaned = []
+    bad_line = re.compile(
+        r"(\[[^\]]+\]|Čia pateikite|Jei yra priedų|Vardas Pavardė|Full name|Navn og etternavn|"
+        r"El\.\s*paštas\s*:?\s*$|E-?post\s*:?\s*$|Email\s*:?\s*$|"
+        r"Telefonas\s*:?\s*$|Phone\s*:?\s*$|Telefon\s*:?\s*$|"
+        r"Adresas\s*:?\s*$|Address\s*:?\s*$|Data\s*:?\s*$)",
+        flags=re.IGNORECASE,
+    )
+    for line in text.splitlines():
+        if bad_line.search(line.strip()):
+            continue
+        cleaned.append(line)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(cleaned)).strip()
+
 
 def document_has_placeholders(text: str) -> bool:
     if not text:
@@ -1418,10 +1452,20 @@ def generate_document_for_state(chat_id: int, state: dict, lang: str, doc_type: 
         send_message(chat_id, msg)
         return
     if document_has_placeholders(answer):
-        state["awaiting_doc_details"] = True
-        state["pending_doc_type"] = doc_type
-        send_message(chat_id, placeholder_fix_message(lang))
-        return
+        # Do not repeatedly ask for name/email if the case already contains identity/contact data.
+        # If the model leaves non-essential placeholders, remove them and send the usable document.
+        if source_has_contact_identity(full_text):
+            answer = remove_unresolved_placeholder_lines(answer)
+        else:
+            cleaned = remove_unresolved_placeholder_lines(answer)
+            # If enough content remains, send it instead of forcing another question.
+            if len(cleaned) >= 300:
+                answer = cleaned
+            else:
+                state["awaiting_doc_details"] = True
+                state["pending_doc_type"] = doc_type
+                send_message(chat_id, placeholder_fix_message(lang))
+                return
     answer = sanitize_generated_document(answer)
     answer = strip_markdown_artifacts(answer)
     answer = enforce_exact_source_emails(answer, full_text)
