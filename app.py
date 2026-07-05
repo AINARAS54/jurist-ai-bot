@@ -299,7 +299,7 @@ def get_state(chat_id: int) -> dict:
             "files": [],
             "upload_menu_sent": False,
             "rating_asked": False,
-            "last_view_key": None,
+            "pending_delete_doc_id": None,
         }
     return USER_STATES[chat_id]
 
@@ -312,17 +312,6 @@ def send_message(chat_id: int, text: str, reply_markup: dict | None = None):
     if not r.ok:
         logger.error("Telegram send error: %s %s", r.status_code, r.text)
     return r.json() if r.ok else None
-
-
-def send_view_message(chat_id: int, view_key: str, text: str, reply_markup: dict | None = None):
-    """Send a screen/menu only once while the same view is already visible.
-    This keeps Telegram clean when users press the same inline button repeatedly.
-    """
-    state = get_state(chat_id)
-    if state.get("last_view_key") == view_key:
-        return None
-    state["last_view_key"] = view_key
-    return send_message(chat_id, text, reply_markup)
 
 
 def send_chunks(chat_id: int, text: str, reply_markup: dict | None = None):
@@ -377,10 +366,11 @@ def send_subscription_required(chat_id: int, lang: str):
 
 
 def after_full_menu(lang: str):
-    # Compact case actions only. Do not repeat "My cases" / "New case" if they are already visible above.
     return {"inline_keyboard": [
         [{"text": "📂 Bylos dokumentai" if lang == "lt" else ("📂 Saksdokumenter" if lang == "no" else "📂 Case documents"), "callback_data": "case_docs"}],
         [{"text": TEXT[lang]["generate_doc"], "callback_data": "show_docs"}],
+        [{"text": TEXT[lang]["my_cases"], "callback_data": "case_list"}],
+        [{"text": TEXT[lang]["new_case"], "callback_data": "new_case"}],
     ]}
 
 
@@ -399,20 +389,25 @@ def case_closed_menu(lang: str):
 
 
 def file_action_menu(lang: str):
-    # Compact active-case menu. Global navigation buttons should not be repeated when they are already visible.
     if lang == "lt":
         return {"inline_keyboard": [
             [{"text": "📂 Bylos dokumentai", "callback_data": "case_docs"}],
             [{"text": TEXT[lang]["generate_doc"], "callback_data": "show_docs"}],
+            [{"text": TEXT[lang]["my_cases"], "callback_data": "case_list"}],
+            [{"text": TEXT[lang]["new_case"], "callback_data": "new_case"}],
         ]}
     if lang == "no":
         return {"inline_keyboard": [
             [{"text": "📂 Saksdokumenter", "callback_data": "case_docs"}],
             [{"text": TEXT[lang]["generate_doc"], "callback_data": "show_docs"}],
+            [{"text": TEXT[lang]["my_cases"], "callback_data": "case_list"}],
+            [{"text": TEXT[lang]["new_case"], "callback_data": "new_case"}],
         ]}
     return {"inline_keyboard": [
         [{"text": "📂 Case documents", "callback_data": "case_docs"}],
         [{"text": TEXT[lang]["generate_doc"], "callback_data": "show_docs"}],
+        [{"text": TEXT[lang]["my_cases"], "callback_data": "case_list"}],
+        [{"text": TEXT[lang]["new_case"], "callback_data": "new_case"}],
     ]}
 
 def detect_case_type(case_text: str) -> str:
@@ -744,17 +739,46 @@ def db_list_case_files(case_id: int):
         return []
 
 
-def db_delete_case(case_id: int, telegram_id: int) -> bool:
+def db_list_case_file_rows(case_id: int):
     try:
-        case = db_get_case(case_id, telegram_id)
-        if not case:
-            return False
-        supabase.table("case_files").delete().eq("case_id", case_id).execute()
-        supabase.table("cases").delete().eq("id", case_id).eq("telegram_id", telegram_id).execute()
-        return True
+        res = (
+            supabase.table("case_files")
+            .select("id, file_name, file_type, telegram_file_id")
+            .eq("case_id", case_id)
+            .order("id", desc=False)
+            .execute()
+        )
+        return res.data or []
     except Exception as e:
-        logger.warning("Case delete failed: %s", e)
-        return False
+        logger.warning("Case file row list failed: %s", e)
+        return []
+
+
+def db_get_case_file_row(file_id: int, case_id: int):
+    try:
+        res = (
+            supabase.table("case_files")
+            .select("id, file_name, file_type, telegram_file_id")
+            .eq("id", file_id)
+            .eq("case_id", case_id)
+            .execute()
+        )
+        return res.data[0] if res.data else None
+    except Exception as e:
+        logger.warning("Case file get failed: %s", e)
+        return None
+
+
+def db_delete_case_file(file_id: int, case_id: int):
+    try:
+        row = db_get_case_file_row(file_id, case_id)
+        if not row:
+            return None
+        supabase.table("case_files").delete().eq("id", file_id).eq("case_id", case_id).execute()
+        return row
+    except Exception as e:
+        logger.warning("Case file delete failed: %s", e)
+        return None
 
 
 def extract_text_from_file(file_name: str, file_bytes: bytes) -> str:
@@ -1286,13 +1310,6 @@ def rating_thanks(lang: str) -> str:
 def maybe_request_rating(chat_id: int, state: dict, lang: str):
     if state.get("rating_asked"):
         return
-    try:
-        user = db_user_get(chat_id)
-        if user and (user.get("rating") or user.get("rating_date")):
-            state["rating_asked"] = True
-            return
-    except Exception:
-        pass
     state["rating_asked"] = True
     send_message(chat_id, rating_prompt(lang), reply_markup=rating_menu(lang))
 
@@ -1361,24 +1378,82 @@ def case_loaded_text(lang: str, case_number: str | None) -> str:
 def show_case_list(chat_id: int, lang: str):
     cases = db_list_cases(chat_id, limit=10)
     if not cases:
-        send_view_message(
-            chat_id,
-            "case_list_empty",
-            no_saved_cases_text(lang),
-            reply_markup={"inline_keyboard": [[{"text": TEXT[lang]["new_case"], "callback_data": "new_case"}]]},
-        )
+        send_message(chat_id, no_saved_cases_text(lang), reply_markup={"inline_keyboard": [[{"text": TEXT[lang]["new_case"], "callback_data": "new_case"}]]})
         return
 
     rows = []
-    case_ids = []
     for c in cases:
         case_id = c.get("id")
-        case_ids.append(str(case_id))
         case_number = c.get("case_number") or f"CASE-{case_id}"
-        rows.append([{"text": str(case_number), "callback_data": f"select_case_{case_id}"}])
+        button_text = str(case_number)
+        rows.append([{"text": button_text, "callback_data": f"select_case_{case_id}"}])
     rows.append([{"text": TEXT[lang]["new_case"], "callback_data": "new_case"}])
-    view_key = "case_list:" + ",".join(case_ids)
-    send_view_message(chat_id, view_key, case_list_title(lang), reply_markup={"inline_keyboard": rows})
+    send_message(chat_id, case_list_title(lang), reply_markup={"inline_keyboard": rows})
+
+
+def docs_delete_button_text(lang: str) -> str:
+    if lang == "lt":
+        return "🗑️ Ištrinti dokumentą"
+    if lang == "no":
+        return "🗑️ Slett dokument"
+    return "🗑️ Delete document"
+
+
+def cancel_text(lang: str) -> str:
+    if lang == "lt":
+        return "❌ Atšaukti"
+    if lang == "no":
+        return "❌ Avbryt"
+    return "❌ Cancel"
+
+
+def docs_menu_for_current_case(lang: str, has_files: bool = True):
+    rows = []
+    if has_files:
+        rows.append([{"text": docs_delete_button_text(lang), "callback_data": "delete_doc_menu"}])
+    return {"inline_keyboard": rows} if rows else None
+
+
+def delete_document_menu(lang: str, file_rows: list[dict]):
+    rows = []
+    for row in file_rows[:20]:
+        file_id = row.get("id")
+        name = (row.get("file_name") or "document").replace("\n", " ").strip()
+        if len(name) > 42:
+            name = name[:39] + "..."
+        rows.append([{"text": f"📄 {name}", "callback_data": f"del_doc_{file_id}"}])
+    rows.append([{"text": cancel_text(lang), "callback_data": "case_docs"}])
+    return {"inline_keyboard": rows}
+
+
+def confirm_delete_document_menu(lang: str, file_id: int):
+    if lang == "lt":
+        yes = "✅ Taip, ištrinti"
+    elif lang == "no":
+        yes = "✅ Ja, slett"
+    else:
+        yes = "✅ Yes, delete"
+    return {"inline_keyboard": [
+        [{"text": yes, "callback_data": f"confirm_del_doc_{file_id}"}],
+        [{"text": cancel_text(lang), "callback_data": "case_docs"}],
+    ]}
+
+
+def show_case_documents(chat_id: int, state: dict, lang: str):
+    case_id = state.get("case_id")
+    if not case_id:
+        send_message(chat_id, TEXT[lang]["no_case"])
+        return
+    rows = db_list_case_file_rows(case_id)
+    files = [row.get("file_name") for row in rows if row.get("file_name")]
+    state["files"] = files
+    if not files:
+        text = "📂 Bylos dokumentų dar nėra." if lang == "lt" else ("📂 Ingen saksdokumenter ennå." if lang == "no" else "📂 No case documents yet.")
+        send_message(chat_id, text)
+        return
+    title = "📂 Bylos dokumentai:" if lang == "lt" else ("📂 Saksdokumenter:" if lang == "no" else "📂 Case documents:")
+    lines = [f"{i + 1}. {name}" for i, name in enumerate(files)]
+    send_message(chat_id, title + "\n\n" + "\n".join(lines), reply_markup=docs_menu_for_current_case(lang, bool(files)))
 
 
 def open_case_text(lang: str, case_number: str | None, files_count: int) -> str:
@@ -1406,9 +1481,9 @@ def load_case_into_state(chat_id: int, state: dict, lang: str, case_id: int):
         "files": files,
         "upload_menu_sent": False,
         "rating_asked": False,
+        "pending_delete_doc_id": None,
     })
-    view_key = f"open_case:{case_id}:{len(files)}"
-    send_view_message(chat_id, view_key, open_case_text(lang, state.get("case_number"), len(files)), reply_markup=file_action_menu(lang))
+    send_message(chat_id, open_case_text(lang, state.get("case_number"), len(files)), reply_markup=file_action_menu(lang))
 
 
 def build_followup_prompt(case_text: str, question: str, lang: str, country: str):
@@ -1453,7 +1528,7 @@ def show_start(chat_id: int, tg_user: dict):
         "files": [],
         "upload_menu_sent": False,
         "rating_asked": False,
-        "last_view_key": None,
+        "pending_delete_doc_id": None,
     })
     db_user_upsert(tg_user, lang)
     start_text = f"{welcome_text(lang)}\n\n{SAFETY_TEXT[lang]}"
@@ -1466,7 +1541,7 @@ def show_country(chat_id: int):
 
 def show_collect_case(chat_id: int):
     state = get_state(chat_id)
-    send_view_message(chat_id, "collect_case", TEXT[state["lang"]]["collect_case"])
+    send_message(chat_id, TEXT[state["lang"]]["collect_case"])
 
 
 def reset_current_case(state: dict):
@@ -1483,7 +1558,7 @@ def reset_current_case(state: dict):
         "files": [],
         "upload_menu_sent": False,
         "rating_asked": False,
-        "last_view_key": None,
+        "pending_delete_doc_id": None,
     })
 
 
@@ -1511,7 +1586,7 @@ def create_case_from_text(chat_id: int, user_text: str):
         "files": [],
         "upload_menu_sent": False,
         "rating_asked": False,
-        "last_view_key": None,
+        "pending_delete_doc_id": None,
     })
     send_message(chat_id, TEXT[lang]["case_created"].format(case_number=case_number))
 
@@ -1587,7 +1662,7 @@ def handle_file(chat_id: int, msg: dict):
             "files": [],
             "upload_menu_sent": False,
             "rating_asked": False,
-            "last_view_key": None,
+            "pending_delete_doc_id": None,
         })
         created_now = True
 
@@ -1734,20 +1809,15 @@ def telegram_webhook():
                 except Exception:
                     show_case_list(chat_id, lang)
 
-            elif data.startswith("delete_case_") or data.startswith("confirm_delete_case_"):
-                show_case_list(chat_id, lang)
-
             elif data == "open_case":
                 if not state.get("case_text"):
                     send_message(chat_id, TEXT[lang]["no_case"])
                 else:
-                    view_key = f"open_case:{state.get('case_id')}:{len(state.get('files') or [])}"
-                    send_view_message(chat_id, view_key, open_case_text(lang, state.get("case_number"), len(state.get("files") or [])), reply_markup=file_action_menu(lang))
+                    send_message(chat_id, open_case_text(lang, state.get("case_number"), len(state.get("files") or [])), reply_markup=file_action_menu(lang))
 
             elif data.startswith("rating_"):
                 rating_value = data.replace("rating_", "")
                 state["rating"] = rating_value
-                state["rating_asked"] = True
                 try:
                     supabase.table("users").update({"rating": int(rating_value), "rating_date": iso(now_utc())}).eq("telegram_id", chat_id).execute()
                 except Exception as e:
@@ -1764,13 +1834,57 @@ def telegram_webhook():
                     send_message(chat_id, "📎 You can add documents using the Telegram attachment icon.")
 
             elif data == "case_docs":
-                files = state.get("files") or []
-                if not files:
-                    send_message(chat_id, "📂 Bylos dokumentų dar nėra." if lang == "lt" else ("📂 Ingen saksdokumenter ennå." if lang == "no" else "📂 No case documents yet."))
+                show_case_documents(chat_id, state, lang)
+
+            elif data == "delete_doc_menu":
+                case_id = state.get("case_id")
+                if not case_id:
+                    send_message(chat_id, TEXT[lang]["no_case"])
                 else:
-                    lines = [f"{i + 1}. {name}" for i, name in enumerate(files)]
-                    title = "📂 Bylos dokumentai:" if lang == "lt" else ("📂 Saksdokumenter:" if lang == "no" else "📂 Case documents:")
-                    send_message(chat_id, title + "\n\n" + "\n".join(lines))
+                    rows = db_list_case_file_rows(case_id)
+                    if not rows:
+                        show_case_documents(chat_id, state, lang)
+                    else:
+                        text = "Pasirinkite dokumentą, kurį norite ištrinti." if lang == "lt" else ("Velg dokumentet du vil slette." if lang == "no" else "Choose the document you want to delete.")
+                        send_message(chat_id, text, reply_markup=delete_document_menu(lang, rows))
+
+            elif data.startswith("del_doc_"):
+                try:
+                    file_id = int(data.replace("del_doc_", ""))
+                    case_id = state.get("case_id")
+                    row = db_get_case_file_row(file_id, case_id) if case_id else None
+                    if not row:
+                        show_case_documents(chat_id, state, lang)
+                    else:
+                        state["pending_delete_doc_id"] = file_id
+                        name = row.get("file_name") or "document"
+                        text = (
+                            f"Ar tikrai norite ištrinti šį dokumentą?\n\n{name}"
+                            if lang == "lt" else
+                            (f"Vil du virkelig slette dette dokumentet?\n\n{name}" if lang == "no" else f"Do you really want to delete this document?\n\n{name}")
+                        )
+                        send_message(chat_id, text, reply_markup=confirm_delete_document_menu(lang, file_id))
+                except Exception:
+                    show_case_documents(chat_id, state, lang)
+
+            elif data.startswith("confirm_del_doc_"):
+                try:
+                    file_id = int(data.replace("confirm_del_doc_", ""))
+                    case_id = state.get("case_id")
+                    deleted = db_delete_case_file(file_id, case_id) if case_id else None
+                    state["pending_delete_doc_id"] = None
+                    if deleted:
+                        files = db_list_case_files(case_id)
+                        state["files"] = files
+                        msg = "✅ Dokumentas ištrintas." if lang == "lt" else ("✅ Dokumentet er slettet." if lang == "no" else "✅ Document deleted.")
+                        send_message(chat_id, msg)
+                        show_case_documents(chat_id, state, lang)
+                    else:
+                        msg = "⚠️ Dokumento ištrinti nepavyko." if lang == "lt" else ("⚠️ Dokumentet kunne ikke slettes." if lang == "no" else "⚠️ The document could not be deleted.")
+                        send_message(chat_id, msg)
+                except Exception:
+                    msg = "⚠️ Dokumento ištrinti nepavyko." if lang == "lt" else ("⚠️ Dokumentet kunne ikke slettes." if lang == "no" else "⚠️ The document could not be deleted.")
+                    send_message(chat_id, msg)
 
             elif data == "analyze_case":
                 if not state.get("case_text"):
