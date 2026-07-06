@@ -79,6 +79,12 @@ Style:
 - Telegram answers must be concise. Avoid long reports unless the user explicitly requests a detailed report.
 - Do not repeat the same URL. If a Google Drive or other link is included, show it only once.
 
+Legal provision selection:
+- Never rely on a fixed list of legal articles or sections.
+- Select only provisions, subsections and points that genuinely match the concrete case facts and selected jurisdiction.
+- If the exact subsection/part is uncertain, do not present it as fact.
+- For complaints about case closure, police inaction or authority decisions, consider procedural law first; use criminal/material provisions only as supporting grounds when facts justify them.
+
 Rules:
 - Copy all personal data, email addresses, phone numbers, addresses, case numbers, dates, document numbers, wallet addresses, bank accounts, TXIDs and other identifiers exactly as they appear in the case.
 - Never modify, correct, shorten, normalize or guess identifying data.
@@ -446,113 +452,87 @@ def detect_case_type(case_text: str) -> str:
 
 def get_legal_reference_block(country: str, case_type: str, case_text: str, lang: str) -> str:
     """
-    Fixed legal map. This prevents random legal sections from changing between analyses.
+    Dynamic legal selection guidance.
+    Justice AI must not use a fixed list of articles. It must select only legal norms that match the concrete case facts.
     """
-    text = (case_text or "").lower()
-    is_police = any(k in text for k in [
-        "policija", "politiet", "politi", "henlegg", "nutrauk", "klage", "skund",
-        "saksbehandlingskapasitet", "etterforskning", "tyrimą", "tyrimas"
-    ])
-    has_large_loss = any(k in text for k in [
-        "18766", "18,766", "didel", "betydelig", "large loss", "økonomisk tap",
-        "finansinis nuostolis", "financial loss"
-    ])
-    has_organized = any(k in text for k in [
-        "organizuot", "organisert", "systemat", "whatsapp", "telegram", "platform", "platforma"
-    ])
-
-    if country == "no":
-        if lang == "lt":
-            lines = [
-                "Naudok tik šiuos teisės aktus. Negeneruok kitų straipsnių.",
-                "",
-                "1. Straffeloven §371 – Bedrageri / sukčiavimas",
-                "Konkreti dalis: §371 a punktas.",
-                "Atitikimo logika: galimas suklaidinimas, dėl kurio asmuo atliko veiksmą ir patyrė nuostolį arba nuostolio riziką.",
-                "Bylos faktai, kurie gali pagrįsti: finansinis nuostolis, kripto pervedimai, investicinė platforma, wallet / blockchain duomenys, susirašinėjimas su įtariamaisiais.",
-            ]
-            if has_large_loss or has_organized:
-                lines += [
-                    "",
-                    "2. Straffeloven §372 – Grovt bedrageri / stambus sukčiavimas",
-                    "Konkrečios dalys: §372 a punktas – reikšminga ekonominė žala; §372 c punktas – veika per kelis atvejus arba ilgesnį laiką; §372 d punktas – kelių asmenų bendras, sisteminis arba organizuotas pobūdis.",
-                    "Naudok tik kaip 'gali būti aktualu', jeigu dokumentuose yra didelis nuostolis, tęstinė schema arba organizuotumo požymiai.",
-                ]
-            if is_police:
-                lines += [
-                    "",
-                    "3. Straffeprosessloven – skundo dėl tyrimo nutraukimo / policijos sprendimo procedūra",
-                    "Konkreti situacijos dalis: policijos sprendimas nutraukti tyrimą, skundas dėl nutraukimo, prašymas peržiūrėti sprendimą arba pateikti papildomus įrodymus.",
-                    "Nerašyk konkretaus Straffeprosessloven paragrafo, jei jo tiksliai nėra byloje ar šiame fiksuotame sąraše.",
-                ]
-            return "\n".join(lines)
-
-        if lang == "no":
-            lines = [
-                "Bruk bare disse rettsgrunnlagene. Ikke lag andre paragrafnumre.",
-                "",
-                "1. Straffeloven §371 – Bedrageri",
-                "Relevant del: §371 bokstav a.",
-                "Trefflogikk: mulig villfarelse som har fått personen til å handle og som har ført til tap eller fare for tap.",
-                "Saksfakta som kan støtte dette: økonomisk tap, kryptotransaksjoner, investeringsplattform, wallet-/blockchain-dokumentasjon, kommunikasjon med mistenkte.",
-            ]
-            if has_large_loss or has_organized:
-                lines += [
-                    "",
-                    "2. Straffeloven §372 – Grovt bedrageri",
-                    "Relevante deler: §372 bokstav a – betydelig økonomisk skade; bokstav c – flere anledninger eller over lengre tid; bokstav d – flere i fellesskap eller systematisk/organisert preg.",
-                    "Bruk bare forsiktig: 'kan være relevant' hvis dokumentene viser stort tap, langvarig eller organisert fremgangsmåte.",
-                ]
-            if is_police:
-                lines += [
-                    "",
-                    "3. Straffeprosessloven – klage over henleggelse / politiets avgjørelse",
-                    "Relevant situasjonsdel: politiets henleggelse, klage på henleggelsen, krav om ny vurdering eller innsending av nye bevis.",
-                    "Ikke oppgi konkret paragrafnummer hvis det ikke fremgår sikkert av saken eller denne faste listen.",
-                ]
-            return "\n".join(lines)
-
-        lines = [
-            "Use only these legal references. Do not invent other sections.",
-            "",
-            "1. Straffeloven §371 – Fraud",
-            "Relevant part: §371(a).",
-            "Matching logic: possible deception causing the person to act, causing loss or risk of loss.",
-            "Supporting facts: financial loss, cryptocurrency transfers, investment platform, wallet/blockchain evidence, communications with suspects.",
-        ]
-        if has_large_loss or has_organized:
-            lines += [
-                "",
-                "2. Straffeloven §372 – Aggravated fraud",
-                "Relevant parts: §372(a) significant financial damage; §372(c) repeated or longer period; §372(d) joint/systematic/organised character.",
-                "Use only cautiously as 'may be relevant' if documents show major loss or organised/repeated conduct.",
-            ]
-        if is_police:
-            lines += [
-                "",
-                "3. Straffeprosessloven – complaint against case closure / police decision",
-                "Matching situation: police case closure, complaint/appeal, request for renewed assessment or submission of new evidence.",
-                "Do not provide a specific section number unless certain from the case or this fixed list.",
-            ]
-        return "\n".join(lines)
+    country_name = COUNTRIES.get(country, COUNTRIES["lt"]).get(lang, COUNTRIES.get(country, COUNTRIES["lt"]).get("en", "selected jurisdiction"))
 
     if lang == "lt":
-        return (
-            "Naudok tik teisės aktus, kurie aiškiai susiję su pasirinkta jurisdikcija ir bylos faktais. "
-            "Kiekvienam teisės aktui nurodyk straipsnį / dalį, atitikimo lygį ir konkrečią bylos dalį. "
-            "Jei konkretaus straipsnio nežinai tiksliai, nerašyk numerio."
-        )
+        return f"""
+TEISĖS NORMŲ PARINKIMO TAISYKLĖ
+
+Prieš rengdamas analizę ar dokumentą, pirmiausia įvertink visus bylos faktus, įkeltų dokumentų tekstą ir įrodymus.
+
+NENAUDOK iš anksto nustatyto straipsnių sąrašo. Straffeloven §371, §372 ar bet kurios kitos normos gali būti nurodomos tik tada, kai konkrečios bylos faktai realiai pagrindžia jų taikymą.
+
+Parink tik tas teisės normas, kurios realiai tinka konkrečiai bylai ir pasirinktai jurisdikcijai: {country_name}.
+
+Prie kiekvienos teisės normos privaloma nurodyti:
+• įstatymo pavadinimą;
+• tikslų straipsnio / paragrafo numerį;
+• konkrečią dalį, punktą, pastraipą ar raidę, jeigu tai įmanoma nustatyti;
+• trumpą paaiškinimą, kodėl ši norma taikoma būtent šiai bylai;
+• konkretų bylos faktą ar dokumentą, kuris pagrindžia normos aktualumą.
+
+Jeigu konkreti dalis ar punktas nėra patikimai nustatomas iš bylos arba iš bendrų teisinių žinių, nenurodyk jos kaip fakto. Tokiu atveju rašyk atsargiai: „gali būti vertinama pagal“, „gali būti aktualu“, „prašoma įvertinti“.
+
+Jeigu norma netinka arba nėra pakankamo faktinio pagrindo, jos nenurodyk. Niekada neįtrauk teisės normų vien tam, kad dokumentas atrodytų profesionalesnis.
+
+Jeigu dokumentas yra skundas dėl tyrimo nutraukimo, policijos neveikimo ar institucijos sprendimo, pirmiausia įvertink proceso teisės normas dėl skundo, peržiūros ar tyrimo atnaujinimo. Materialiosios baudžiamosios teisės normas naudok tik kaip faktinį pagrindą, kodėl tyrimas turėtų būti tęsiamas.
+
+Jeigu yra keli galimi teisiniai kvalifikavimo variantai, pateik juos prioriteto tvarka ir aiškiai atskirk stipriausiai taikomas normas nuo tik galimai aktualių.
+"""
+
     if lang == "no":
-        return (
-            "Bruk bare rettsgrunnlag som tydelig passer jurisdiksjonen og saksfakta. "
-            "For hvert rettsgrunnlag skal du vise paragraf/del, treffnivå og konkret del av saken. "
-            "Hvis paragrafnummeret ikke er sikkert, ikke oppgi nummer."
-        )
-    return (
-        "Use only legal references clearly matching the jurisdiction and case facts. "
-        "For each reference, show section/part, match level and the concrete part of the case. "
-        "If the exact section number is not certain, do not provide a number."
-    )
+        return f"""
+REGEL FOR VALG AV RETTSGRUNNLAG
+
+Før du lager en vurdering eller et dokument, skal du først vurdere alle saksfakta, teksten fra opplastede dokumenter og bevisene.
+
+IKKE bruk en forhåndsbestemt liste med paragrafer. Straffeloven §371, §372 eller andre bestemmelser skal bare nevnes dersom de konkrete saksfakta faktisk støtter at bestemmelsen kan være relevant.
+
+Velg bare rettsregler som faktisk passer den konkrete saken og valgt jurisdiksjon: {country_name}.
+
+For hver rettsregel skal du oppgi:
+• lovens navn;
+• nøyaktig paragrafnummer;
+• konkret ledd, bokstav eller punkt dersom dette kan fastslås;
+• kort forklaring på hvorfor regelen passer denne saken;
+• konkret saksfaktum eller dokumentasjon som gjør regelen relevant.
+
+Hvis konkret ledd/bokstav ikke kan fastslås sikkert ut fra saken eller sikker juridisk kunnskap, skal du ikke oppgi det som et faktum. Bruk forsiktig formulering: «kan være relevant», «kan vurderes etter», «det bes vurdert om».
+
+Hvis en regel ikke passer eller det ikke finnes tilstrekkelig faktagrunnlag, skal den ikke nevnes. Ikke ta med rettsregler bare for at dokumentet skal se mer juridisk ut.
+
+Hvis dokumentet gjelder klage over henleggelse, politiets manglende oppfølging eller en myndighetsavgjørelse, skal prosessuelle regler om klage, ny vurdering eller gjenopptakelse vurderes først. Straffebestemmelser brukes bare som faktagrunnlag for hvorfor saken bør vurderes på nytt.
+
+Hvis flere rettslige kvalifikasjoner er mulige, skal de prioriteres etter styrke og skilles tydelig mellom sterkt relevante regler og bare mulig relevante regler.
+"""
+
+    return f"""
+RULE FOR SELECTING LEGAL PROVISIONS
+
+Before preparing any analysis or document, first assess all case facts, extracted document text and evidence.
+
+DO NOT use a predetermined list of legal sections. Straffeloven §371, §372 or any other provision may be mentioned only if the concrete case facts actually support its relevance.
+
+Select only legal provisions that genuinely match the specific case and selected jurisdiction: {country_name}.
+
+For each legal provision, state:
+• the name of the law;
+• the exact section/article number;
+• the specific subsection, paragraph, letter or point if it can be determined;
+• a short explanation of why the provision applies to this case;
+• the concrete case fact or document supporting its relevance.
+
+If the exact subsection or point cannot be determined reliably from the case or solid legal knowledge, do not present it as fact. Use cautious wording such as “may be relevant”, “may be assessed under”, or “it is requested that the authority assess whether”.
+
+If a provision does not fit or lacks sufficient factual basis, do not mention it. Never include legal provisions merely to make the document look more professional.
+
+If the document concerns a complaint against case closure, police inaction or an authority decision, first consider procedural rules on complaint, review or reopening. Criminal law provisions should only be used as factual support for why the case should be reassessed.
+
+If several legal classifications are possible, list them by priority and clearly distinguish strongly applicable provisions from only possibly relevant ones.
+"""
 
 
 def normalize_case_answer(text: str) -> str:
@@ -933,13 +913,13 @@ Taisyklės:
 - Eilučių skaičius neribojamas.
 - Visada palik tuščią eilutę tarp skyrių.
 - Nenaudok vientiso sulipusio teksto bloko.
-- Teisės aktų skyriuje naudok tik fiksuotą sąrašą žemiau.
-- Negeneruok kitų straipsnių ar paragrafų, kurių nėra fiksuotame sąraše.
-- Kiekvienam teisės aktui privalomai nurodyk konkrečią dalį/punktą, atitikimo lygį, procentą ir bylos faktą.
+- Teisės aktų skyriuje nenaudok fiksuoto straipsnių sąrašo. Parink tik tas normas ir jų dalis, kurios tikrai atitinka konkrečios bylos faktus.
+- Kiekvienam teisės aktui privalomai nurodyk konkrečią dalį / punktą tik tada, kai ji patikimai nustatyta. Jei konkreti dalis neaiški, nenurodyk jos kaip fakto.
+- Kiekvienai normai nurodyk atitikimo lygį, procentą ir konkretų bylos faktą.
 - Neteik kategoriško teiginio, kad nusikaltimas įvykdytas. Naudok: „galimai taikytina“, „gali būti aktualu“, „gali būti vertinama pagal“.
 - „Galimi dokumentai“ vadink „Rekomenduojami dokumentai“ ir nurodyk dokumentus, kuriuos galima sugeneruoti, ne techninius failų pavadinimus.
 
-Fiksuoti teisės aktai ir atitikimo logika:
+Teisės normų parinkimo taisyklės:
 {legal_block}
 
 Bylos informacija:
@@ -963,7 +943,7 @@ Naudok šiuos skyrius:
 
 🔓 Išplėstinio atsakymo galimybė
 
-Teisės aktus naudok tik iš šio fiksuoto sąrašo:
+Teisės normas parink pagal šias taisykles:
 {legal_block}
 
 Situacija:
@@ -976,7 +956,7 @@ Svar kun på norsk. Jurisdiksjon: {country_name}.
 
 Lag en tydelig {'full vurdering' if full else 'førstevurdering'} for Telegram med blank linje mellom seksjoner.
 
-Bruk bare disse rettsgrunnlagene. For hvert rettsgrunnlag skal du vise konkret del, treffnivå, prosent og hvilken del av saken som passer:
+Velg bare de rettsreglene som faktisk passer saken. For hvert rettsgrunnlag skal du vise konkret del bare hvis den kan fastslås sikkert, treffnivå, prosent og hvilken del av saken som passer:
 {legal_block}
 
 Saksinformasjon:
@@ -988,7 +968,7 @@ Answer only in English. Jurisdiction: {country_name}.
 
 Prepare a clear {'full case review' if full else 'initial assessment'} for Telegram with blank lines between sections.
 
-Use only these legal references. For each reference, show exact part, match level, percentage and the concrete part of the case that matches:
+Select only the legal provisions that genuinely fit the case. For each reference, show the exact part only if reliably determined, match level, percentage and the concrete part of the case that matches:
 {legal_block}
 
 Case information:
@@ -1094,7 +1074,7 @@ Svarbiausios taisyklės:
 - Jei pasirinkta Jungtinė Karalystė, nenaudok Lietuvos institucijų.
 - Nenaudok kreipinių: Gerbiamasis, Gerbiamoji, Gerb. pone, Gerb. ponia.
 - Dokumento viršuje nerašyk „Sukūrė Justice AI“. Dokumentą pradėk nuo gavėjo arba dokumento pavadinimo.
-- Įtrauk tik fiksuotus galimai taikytinus teisės aktus iš žemiau esančio sąrašo. Prie kiekvieno nurodyk konkrečią dalį, atitikimo pagrindą ir bylos faktus. Neteik kategoriško teiginio, kad nusikaltimas įvykdytas.
+- Įtrauk tik tas teisės normas ir jų dalis, kurios realiai atitinka konkrečią bylą. Nenaudok iš anksto fiksuotų straipsnių. Prie kiekvienos normos nurodyk konkrečią dalį tik tada, kai ji patikimai nustatyta, taip pat atitikimo pagrindą ir bylos faktus. Neteik kategoriško teiginio, kad nusikaltimas įvykdytas.
 - Jei dokumente yra interneto nuoroda, rodyk ją tik vieną kartą. Nekartok tos pačios nuorodos skliaustuose ir nekartok jos keliose vietose.
 - Google Drive nuorodą pateik taip: „Google Drive: https://...“.
 - Jei yra aiškūs priedai pagal bylą, naudok skyrių „Priedai:“ ir išvardink juos profesionaliai pagal turinį, ne techniniais failų pavadinimais. Pvz. „Policijos pranešimas apie tyrimo nutraukimą (2026-05-04)“.
@@ -1109,7 +1089,7 @@ Svarbiausios taisyklės:
 - Niekada automatiškai nepridėk ID / asmens kodo / fødselsnummer eilutės, nebent vartotojas aiškiai paprašė.
 - El. pašto adresų, telefono numerių, adresų, bylos numerių, wallet adresų, TXID, banko sąskaitų ir kitų identifikacinių duomenų niekada nekeisk, netaisyk, netrumpink ir neformatuok. Perkelk juos simbolis į simbolį tiksliai taip, kaip jie pateikti byloje.
 
-Fiksuoti teisės aktai ir atitikimo logika:
+Teisės normų parinkimo taisyklės:
 {legal_block}
 
 Bylos informacija ir nuskaitytas dokumentų tekstas:
@@ -1122,6 +1102,12 @@ Reply only in {lang_name(lang)}. Jurisdiction: {country_name}.
 Prepare this document: {doc}.
 Case type from content: {case_type}.
 Recipient guidance: {recipient_hint}
+
+Legal provision selection:
+- Never rely on a fixed list of legal articles or sections.
+- Select only provisions, subsections and points that genuinely match the concrete case facts and selected jurisdiction.
+- If the exact subsection/part is uncertain, do not present it as fact.
+- For complaints about case closure, police inaction or authority decisions, consider procedural law first; use criminal/material provisions only as supporting grounds when facts justify them.
 
 Rules:
 - Generate the document from the real case information and extracted file text.
@@ -1141,7 +1127,7 @@ Rules:
 - If the UK is selected, do not use Lithuanian institutions.
 - Do not use Dear Sir/Madam or gendered salutations.
 - Do not write "Created by Justice AI" at the top. Start with the recipient or document title.
-- Include only fixed legal references from the list below. For each, show relevant part, matching reason and case facts. Do not state that a crime definitely occurred.
+- Include only legal provisions and exact parts that genuinely match the concrete case facts. Do not use a predetermined list. For each provision, show the exact part only if reliably determined, matching reason and case facts. Do not state that a crime definitely occurred.
 - If a URL appears in the document, show it only once. Do not repeat the same URL in brackets or in multiple places.
 - Format Google Drive links as: "Google Drive: https://...".
 - If real attachments are identifiable from the case, include an Attachments section and describe them professionally by content, not by raw technical filenames. Otherwise omit it.
@@ -1156,7 +1142,7 @@ Rules:
 - Never automatically add ID / personal number / fødselsnummer unless the user explicitly asked for it.
 - Never change, correct, shorten, normalize or reformat email addresses, phone numbers, addresses, case numbers, wallet addresses, TXIDs, bank accounts or other identifying data. Copy them character by character exactly as they appear in the case.
 
-Fixed legal references and matching logic:
+Legal provision selection rules:
 {legal_block}
 
 Case information and extracted document text:
