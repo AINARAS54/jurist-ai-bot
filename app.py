@@ -1347,36 +1347,73 @@ def rating_thanks(lang: str) -> str:
 
 
 def db_rating_given(telegram_id: int) -> bool:
+    """
+    Rating must be persistent across /start, deploys and Telegram chat deletion.
+    Primary storage: users.rating_given / users.rating / users.rating_date when those columns exist.
+    Fallback storage: payments table row with plan_name='rating' so the feature works without a schema migration.
+    """
     try:
         user = db_user_get(telegram_id)
-        if not user:
-            return False
-        if user.get("rating_given") is True:
-            return True
-        if user.get("rating") is not None:
-            return True
-        if user.get("rating_date"):
-            return True
+        if user:
+            if user.get("rating_given") is True:
+                return True
+            if user.get("rating") is not None:
+                return True
+            if user.get("rating_date"):
+                return True
     except Exception as e:
-        logger.info("Rating status check failed: %s", e)
+        logger.info("Rating status check in users failed: %s", e)
+
+    try:
+        res = (
+            supabase.table("payments")
+            .select("id")
+            .eq("telegram_id", telegram_id)
+            .eq("plan_name", "rating")
+            .limit(1)
+            .execute()
+        )
+        return bool(res.data)
+    except Exception as e:
+        logger.info("Rating status fallback check failed: %s", e)
+
     return False
 
 
 def db_save_rating(telegram_id: int, rating_value: int):
+    """Persist rating once. Works even if rating columns were not added to users."""
+    if db_rating_given(telegram_id):
+        return
+
+    saved = False
     payload = {"rating": rating_value, "rating_given": True, "rating_date": iso(now_utc())}
     try:
         supabase.table("users").update(payload).eq("telegram_id", telegram_id).execute()
-        return
+        saved = True
     except Exception as e:
-        logger.info("Rating_given column may be missing, retrying without it: %s", e)
+        logger.info("Rating columns may be missing in users, using payments fallback: %s", e)
+
+    # Fallback that uses an existing table/columns, so no SQL migration is required.
     try:
-        supabase.table("users").update({"rating": rating_value, "rating_date": iso(now_utc())}).eq("telegram_id", telegram_id).execute()
+        supabase.table("payments").insert({
+            "telegram_id": telegram_id,
+            "plan_name": "rating",
+            "stars_paid": int(rating_value),
+            "valid_until": iso(now_utc()),
+        }).execute()
+        saved = True
     except Exception as e:
-        logger.info("Rating was stored only in memory: %s", e)
+        logger.info("Rating fallback insert failed: %s", e)
+
+    if not saved:
+        logger.warning("Rating could not be persisted for telegram_id=%s", telegram_id)
 
 
 def maybe_request_rating(chat_id: int, state: dict, lang: str):
-    if state.get("rating_asked") or db_rating_given(chat_id):
+    if db_rating_given(chat_id):
+        state["rating_asked"] = True
+        return
+    if state.get("rating_asked"):
         return
     state["rating_asked"] = True
     send_message(chat_id, rating_prompt(lang), reply_markup=rating_menu(lang))
