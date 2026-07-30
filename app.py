@@ -1945,17 +1945,61 @@ def telegram_webhook():
                 plan = PLANS.get(plan_key)
                 if not plan:
                     return jsonify({"ok": True})
+
                 description = f"{plan[lang]} access"
                 payload = f"sub|{plan_key}|{chat_id}"
-                requests.post(f"{TELEGRAM_API}/sendInvoice", json={
+
+                invoice = {
                     "chat_id": chat_id,
                     "title": "Justice AI Access",
                     "description": description,
                     "payload": payload,
-                    "provider_token": "",
                     "currency": "XTR",
-                    "prices": [{"label": description, "amount": plan["stars"]}],
-                }, timeout=20)
+                    "prices": [
+                        {
+                            "label": description,
+                            "amount": plan["stars"],
+                        }
+                    ],
+                }
+
+                try:
+                    response = requests.post(
+                        f"{TELEGRAM_API}/sendInvoice",
+                        json=invoice,
+                        timeout=20,
+                    )
+
+                    logger.info(
+                        "sendInvoice status=%s body=%s",
+                        response.status_code,
+                        response.text,
+                    )
+
+                    if not response.ok:
+                        send_message(
+                            chat_id,
+                            "⚠️ Nepavyko sukurti mokėjimo. Bandykite dar kartą."
+                            if lang == "lt"
+                            else (
+                                "⚠️ Kunne ikke opprette betalingen. Prøv igjen."
+                                if lang == "no"
+                                else "⚠️ Could not create the payment. Please try again."
+                            ),
+                        )
+
+                except requests.RequestException as exc:
+                    logger.exception("sendInvoice failed: %s", exc)
+                    send_message(
+                        chat_id,
+                        "⚠️ Nepavyko sukurti mokėjimo. Bandykite dar kartą."
+                        if lang == "lt"
+                        else (
+                            "⚠️ Kunne ikke opprette betalingen. Prøv igjen."
+                            if lang == "no"
+                            else "⚠️ Could not create the payment. Please try again."
+                        ),
+                    )
 
             elif data == "ask_question":
                 if not state.get("case_text"):
@@ -2195,7 +2239,6 @@ def telegram_webhook():
         return jsonify({"ok": False, "error": str(e)}), 500
 
     return jsonify({"ok": True})
-
 
 @app.route("/set-webhook", methods=["GET"])
 def set_webhook():
