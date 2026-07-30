@@ -1707,13 +1707,36 @@ def reset_current_case(state: dict):
     })
 
 
+def archive_current_case(state: dict):
+    """Archive the currently selected case without deleting its history."""
+    case_id = state.get("case_id")
+    if not case_id:
+        return
+    try:
+        supabase.table("cases").update({"status": "archived"}).eq("id", case_id).execute()
+    except Exception as exc:
+        # Starting a new case must still work even if archiving fails.
+        logger.warning("Could not archive current case %s: %s", case_id, exc)
+
+
 def start_new_case(chat_id: int, state: dict, lang: str):
-    active, until = db_subscription_active(chat_id)
+    """Start a clean case flow while preserving previously saved cases."""
+    lang = lang if lang in ("lt", "no", "en") else "en"
+
+    try:
+        active, _ = db_subscription_active(chat_id)
+    except Exception as exc:
+        logger.exception("Subscription check failed while starting a new case: %s", exc)
+        active = False
+
     if not active:
         reset_current_case(state)
         send_subscription_required(chat_id, lang)
         return
+
+    archive_current_case(state)
     reset_current_case(state)
+    state["lang"] = lang
     show_collect_case(chat_id)
 
 
@@ -1942,6 +1965,7 @@ def telegram_webhook():
                     send_message(chat_id, TEXT[lang]["ask_prompt"])
 
             elif data == "new_case":
+                logger.info("New case requested: chat_id=%s", chat_id)
                 start_new_case(chat_id, state, lang)
 
             elif data == "case_list":
@@ -2118,6 +2142,7 @@ def telegram_webhook():
                 return jsonify({"ok": True})
 
             if msg.get("document") or msg.get("photo"):
+                lang = state.get("lang") or detect_lang(user)
                 if not state.get("accepted"):
                     show_start(chat_id, user)
                 elif not state.get("country"):
