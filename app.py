@@ -1949,18 +1949,31 @@ def telegram_webhook():
                 description = f"{plan[lang]} access"
                 payload = f"sub|{plan_key}|{chat_id}"
 
+                if lang == "lt":
+                    warning_text = (
+                        "⚠️ Prieš pirkdami abonementą įsitikinkite, kad jūsų Telegram Stars balanse yra pakankamai žvaigždučių.\n\n"
+                        "Jeigu balansas lygus 0, Telegram pasiūlys pirmiausia įsigyti Stars. Po to galėsite tęsti abonemento pirkimą."
+                    )
+                elif lang == "no":
+                    warning_text = (
+                        "⚠️ Før du kjøper abonnementet, kontroller at du har nok Telegram Stars.\n\n"
+                        "Hvis saldoen er 0, vil Telegram først be deg kjøpe Stars. Deretter kan du fullføre kjøpet."
+                    )
+                else:
+                    warning_text = (
+                        "⚠️ Before purchasing the subscription, make sure you have enough Telegram Stars.\n\n"
+                        "If your balance is 0, Telegram will first ask you to buy Stars. Then you can complete the purchase."
+                    )
+
+                send_message(chat_id, warning_text)
+
                 invoice = {
                     "chat_id": chat_id,
                     "title": "Justice AI Access",
                     "description": description,
                     "payload": payload,
                     "currency": "XTR",
-                    "prices": [
-                        {
-                            "label": description,
-                            "amount": plan["stars"],
-                        }
-                    ],
+                    "prices": [{"label": description, "amount": plan["stars"]}],
                 }
 
                 try:
@@ -1977,28 +1990,14 @@ def telegram_webhook():
                     )
 
                     if not response.ok:
-                        send_message(
-                            chat_id,
-                            "⚠️ Nepavyko sukurti mokėjimo. Bandykite dar kartą."
-                            if lang == "lt"
-                            else (
-                                "⚠️ Kunne ikke opprette betalingen. Prøv igjen."
-                                if lang == "no"
-                                else "⚠️ Could not create the payment. Please try again."
-                            ),
+                        send_message(chat_id,
+                            "⚠️ Nepavyko sukurti mokėjimo." if lang=="lt" else ("⚠️ Kunne ikke opprette betaling." if lang=="no" else "⚠️ Could not create payment.")
                         )
 
                 except requests.RequestException as exc:
                     logger.exception("sendInvoice failed: %s", exc)
-                    send_message(
-                        chat_id,
-                        "⚠️ Nepavyko sukurti mokėjimo. Bandykite dar kartą."
-                        if lang == "lt"
-                        else (
-                            "⚠️ Kunne ikke opprette betalingen. Prøv igjen."
-                            if lang == "no"
-                            else "⚠️ Could not create the payment. Please try again."
-                        ),
+                    send_message(chat_id,
+                        "⚠️ Nepavyko sukurti mokėjimo." if lang=="lt" else ("⚠️ Kunne ikke opprette betaling." if lang=="no" else "⚠️ Could not create payment.")
                     )
 
             elif data == "ask_question":
